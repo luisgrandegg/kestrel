@@ -18,8 +18,8 @@ Append-only, as-of-dated storage behind a repository module that is the **only**
 
 ## Acceptance criteria
 
-- [ ] Test: writing the same `(ticker, date)` price twice is a no-op (row count unchanged, value unchanged).
-- [ ] Test: writing the same `(ticker, as_of)` snapshot twice is a no-op.
-- [ ] Test: `latestSnapshot` returns the `max(as_of)` row while prior rows remain readable.
-- [ ] No `UPDATE`/`DELETE` paths exist for observation tables.
-- [ ] M2 Definition of Done satisfied.
+- [x] Test: writing the same `(ticker, date)` price twice is a no-op (row count unchanged, value unchanged).
+- [x] Test: writing the same `(ticker, as_of)` snapshot twice is a no-op.
+- [x] Test: `latestSnapshot` returns the `max(as_of)` row while prior rows remain readable.
+- [x] No `UPDATE`/`DELETE` paths exist for observation tables.
+- [x] M2 Definition of Done satisfied.
