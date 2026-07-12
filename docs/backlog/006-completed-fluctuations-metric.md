@@ -19,8 +19,8 @@ Implement the percentage-ZigZag / directional-change algorithm as a **pure funct
 
 ## Acceptance criteria
 
-- [ ] Every §5.2 acceptance test green, exactly.
-- [ ] `[100,112,98,113,99,114] → 4` with the trailing +15% leg demonstrably excluded.
-- [ ] Both monotonic cases return `0`.
-- [ ] No imports from `providers/` or `storage/`; no `Date.now()`.
-- [ ] θ and lookback come from parameters/config — no magic numbers (guardrail 5).
+- [x] Every §5.2 acceptance test green, exactly.
+- [x] `[100,112,98,113,99,114] → 4` with the trailing +15% leg demonstrably excluded.
+- [x] Both monotonic cases return `0`.
+- [x] No imports from `providers/` or `storage/`; no `Date.now()`.
+- [x] θ and lookback come from parameters/config — no magic numbers (guardrail 5).

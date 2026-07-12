@@ -18,7 +18,7 @@ Capability mapping per `MVP.md` §2:
 | `dividendCalendar` | `quoteSummary` → `calendarEvents.exDividendDate` / `summaryDetail.exDividendDate` |
 
 - Normalise into `DailyClose`, `AnalystSnapshot`, `EarningsSnapshot`, `DividendSnapshot` — including instrument currency.
-- **Fail loud at the adapter edge:** malformed or partial Yahoo responses (missing target, missing dates, non-numeric closes) throw here, not three stages downstream.
+- **Fail loud at the adapter edge:** malformed or partial Yahoo responses (missing target, missing dates, non-positive or non-finite closes) throw here, not three stages downstream. Storage is append-only, so a bad close that slips through can never be removed — the positivity contract on `DailyClose.close` must be enforced here.
 - No Yahoo field name, endpoint, or quirk escapes `providers/yahoo/` (lint-enforced by item 004).
 
 ## Acceptance criteria

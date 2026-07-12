@@ -26,7 +26,7 @@ Plus edge cases:
 
 ## Acceptance criteria
 
-- [ ] All five §5.2 rows encoded as tests, expected values verbatim from the spec.
-- [ ] The canonical case asserts the trailing **+15%** leg is *not* counted (confirm-on-reversal semantics, `MVP.md` §5.2 "deliberate rule").
-- [ ] Edge-case tests present.
-- [ ] Tests fail (red) until item 006 lands — do not stub the metric to green.
+- [x] All five §5.2 rows encoded as tests, expected values verbatim from the spec.
+- [x] The canonical case asserts the trailing **+15%** leg is *not* counted (confirm-on-reversal semantics, `MVP.md` §5.2 "deliberate rule").
+- [x] Edge-case tests present.
+- [x] Tests fail (red) until item 006 lands — do not stub the metric to green.
