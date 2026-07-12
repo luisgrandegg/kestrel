@@ -29,6 +29,6 @@ Defaults exactly as pinned in `MVP.md` §9:
 
 ## Acceptance criteria
 
-- [ ] All §9 keys exist with exactly the pinned defaults.
-- [ ] Tests prove an override replaces a default without touching source.
-- [ ] Per-screen `upsideThreshold` override works while other screens keep the default.
+- [x] All §9 keys exist with exactly the pinned defaults.
+- [x] Tests prove an override replaces a default without touching source.
+- [x] Per-screen `upsideThreshold` override works while other screens keep the default.
