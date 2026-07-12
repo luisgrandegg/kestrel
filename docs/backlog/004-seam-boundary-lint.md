@@ -16,6 +16,6 @@ Make the seam boundaries mechanical: an import that crosses a seam fails CI, so 
 
 ## Acceptance criteria
 
-- [ ] An intentional cross-seam import (e.g. `metrics/` importing from `providers/`) fails lint — demonstrated, then removed.
-- [ ] `npm test` / CI includes the lint check.
-- [ ] Completing 001–004 satisfies the M0 Definition of Done.
+- [x] An intentional cross-seam import (e.g. `metrics/` importing from `providers/`) fails lint — demonstrated, then removed.
+- [x] `npm test` / CI includes the lint check.
+- [x] Completing 001–004 satisfies the M0 Definition of Done.

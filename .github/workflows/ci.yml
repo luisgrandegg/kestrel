@@ -19,6 +19,9 @@ jobs:
       - name: Lint and format check (Biome)
         run: pnpm biome ci .
 
+      - name: Dependency boundaries (dependency-cruiser)
+        run: pnpm lint:deps
+
   typecheck:
     runs-on: ubuntu-latest
     steps:
