@@ -12,12 +12,16 @@ const THETA = 0.1;
 
 describe("countCompletedFluctuations — MVP.md §5.2 acceptance table (θ = 0.10)", () => {
   it("[100,112,98,113,99,114] → 4: four confirmed legs; trailing up-leg to 114 excluded", () => {
-    expect(countCompletedFluctuations([100, 112, 98, 113, 99, 114], THETA)).toBe(4);
+    expect(
+      countCompletedFluctuations([100, 112, 98, 113, 99, 114], THETA),
+    ).toBe(4);
   });
 
   it("counts only completed legs: the trailing +15% leg (99 → 114) is NOT counted, because no ≥θ reversal confirms it", () => {
-    // The canonical confirm-on-reversal case. Dropping the trailing leg
-    // changes nothing: it was pending, not counted.
+    // The canonical confirm-on-reversal case: the final +15% move to 114
+    // only *confirms* the previous down-leg (the 4th count) — it is never
+    // counted itself. Dropping it therefore removes exactly that
+    // confirmation, and the pending leg to 114 was never in the count.
     expect(countCompletedFluctuations([100, 112, 98, 113, 99], THETA)).toBe(
       countCompletedFluctuations([100, 112, 98, 113, 99, 114], THETA) - 1,
     );
@@ -72,9 +76,9 @@ describe("countCompletedFluctuations — edge cases", () => {
   });
 
   it("throws on non-finite closes", () => {
-    expect(() =>
-      countCompletedFluctuations([100, Number.NaN], THETA),
-    ).toThrow(RangeError);
+    expect(() => countCompletedFluctuations([100, Number.NaN], THETA)).toThrow(
+      RangeError,
+    );
     expect(() =>
       countCompletedFluctuations([100, Number.POSITIVE_INFINITY], THETA),
     ).toThrow(RangeError);
