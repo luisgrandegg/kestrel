@@ -57,7 +57,8 @@ module.exports = {
     },
     {
       name: "no-circular",
-      comment: "Seams are one-directional; cycles mean a seam has been breached.",
+      comment:
+        "Seams are one-directional; cycles mean a seam has been breached.",
       severity: "error",
       from: {},
       to: { circular: true },
