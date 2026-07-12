@@ -1,3 +1,5 @@
+import { assertPositiveFinite } from "./guards.js";
+
 /**
  * Completed-fluctuations metric (backlog item 006) — MVP.md §5.2.
  *
@@ -27,11 +29,7 @@ export function countCompletedFluctuations(
     );
   }
   for (const close of closes) {
-    if (!Number.isFinite(close) || close <= 0) {
-      throw new RangeError(
-        `closes must be positive finite prices, got: ${close}`,
-      );
-    }
+    assertPositiveFinite("close", close);
   }
 
   const first = closes[0];

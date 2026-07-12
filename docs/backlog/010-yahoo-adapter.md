@@ -21,6 +21,10 @@ Capability mapping per `MVP.md` §2:
 - **Fail loud at the adapter edge:** malformed or partial Yahoo responses (missing target, missing dates, non-positive or non-finite closes) throw here, not three stages downstream. Storage is append-only, so a bad close that slips through can never be removed — the positivity contract on `DailyClose.close` must be enforced here.
 - No Yahoo field name, endpoint, or quirk escapes `providers/yahoo/` (lint-enforced by item 004).
 
+## Open question — decide before building
+
+"Missing target" has two readings the current design conflates: (a) the response is **malformed** → throw at the adapter (current rule), and (b) the ticker **legitimately has no analyst target**. The shared types cannot represent (b) for analyst targets — `AnalystSnapshot.medianTarget` is non-nullable — unlike earnings/dividends, where `null` means "none scheduled". If a covered-but-targetless instrument exists on the watchlist, its `analystTargets` fetch would re-fail every daily run. Options: (1) make `medianTarget` nullable + an explicit not-qualified reason in the metric, (2) skip writing a snapshot when no coverage exists, (3) keep throw-on-missing as designed. This is a spec ambiguity — ask before implementing (CLAUDE.md "when you're unsure").
+
 ## Acceptance criteria
 
 - [ ] Contract tests against recorded/mocked `yahoo-finance2` responses for all four capabilities.

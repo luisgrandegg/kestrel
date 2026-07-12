@@ -1,3 +1,5 @@
+import { assertNonNegativeInteger, assertPositiveFinite } from "./guards.js";
+
 /**
  * Implied-upside metric (backlog item 007) — MVP.md §5.1.
  *
@@ -29,33 +31,24 @@ export type ImpliedUpsideResult =
 export function impliedUpside(input: ImpliedUpsideInput): ImpliedUpsideResult {
   const { medianTarget, latestClose, numAnalysts, minAnalysts } = input;
 
-  if (!Number.isFinite(latestClose) || latestClose <= 0) {
-    throw new RangeError(
-      `latestClose must be a positive finite price, got: ${latestClose}`,
-    );
-  }
-  if (!Number.isFinite(medianTarget) || medianTarget <= 0) {
-    throw new RangeError(
-      `medianTarget must be a positive finite price, got: ${medianTarget}`,
-    );
-  }
-  if (!Number.isInteger(numAnalysts) || numAnalysts < 0) {
-    throw new RangeError(
-      `numAnalysts must be a non-negative integer, got: ${numAnalysts}`,
-    );
-  }
-  if (!Number.isInteger(minAnalysts) || minAnalysts < 0) {
-    throw new RangeError(
-      `minAnalysts must be a non-negative integer, got: ${minAnalysts}`,
-    );
-  }
+  assertPositiveFinite("latestClose", latestClose);
+  assertPositiveFinite("medianTarget", medianTarget);
+  assertNonNegativeInteger("numAnalysts", numAnalysts);
+  assertNonNegativeInteger("minAnalysts", minAnalysts);
 
   if (numAnalysts < minAnalysts) {
     return { qualified: false, reason: "insufficient-analysts" };
   }
 
-  return {
-    qualified: true,
-    impliedUpside: (medianTarget - latestClose) / latestClose,
-  };
+  const upside = (medianTarget - latestClose) / latestClose;
+  // A near-zero (e.g. subnormal) close passes the positive-finite guard but
+  // can overflow the ratio — never hand a non-finite "qualified" number to
+  // the screens (CONSTITUTION.md §5). No epsilon: finiteness needs none.
+  if (!Number.isFinite(upside)) {
+    throw new RangeError(
+      `implied upside is not finite (medianTarget=${medianTarget}, latestClose=${latestClose})`,
+    );
+  }
+
+  return { qualified: true, impliedUpside: upside };
 }
