@@ -18,13 +18,12 @@ describe("countCompletedFluctuations — MVP.md §5.2 acceptance table (θ = 0.1
   });
 
   it("counts only completed legs: the trailing +15% leg (99 → 114) is NOT counted, because no ≥θ reversal confirms it", () => {
-    // The canonical confirm-on-reversal case: the final +15% move to 114
-    // only *confirms* the previous down-leg (the 4th count) — it is never
-    // counted itself. Dropping it therefore removes exactly that
-    // confirmation, and the pending leg to 114 was never in the count.
-    expect(countCompletedFluctuations([100, 112, 98, 113, 99], THETA)).toBe(
-      countCompletedFluctuations([100, 112, 98, 113, 99, 114], THETA) - 1,
-    );
+    // The canonical confirm-on-reversal case: dropping the final 114 leaves
+    // the 113→99 down-leg (−12.4%, past θ) as the trailing PENDING leg.
+    // Confirm-on-reversal yields 3; the rejected instant-count semantics
+    // (count a leg the moment it crosses θ) would yield 4 — so this absolute
+    // pin discriminates exactly the "deliberate rule" of MVP.md §5.2.
+    expect(countCompletedFluctuations([100, 112, 98, 113, 99], THETA)).toBe(3);
   });
 
   it("[100,110,121,133] → 0: monotonic, never reverses ≥10%, nothing confirmed", () => {
@@ -90,6 +89,12 @@ describe("countCompletedFluctuations — edge cases", () => {
       RangeError,
     );
     expect(() => countCompletedFluctuations([100, 110], Number.NaN)).toThrow(
+      RangeError,
+    );
+    // θ ≥ 1 can never be confirmed by a positive price series: reject loudly
+    // instead of silently counting 0 (e.g. a user writing 10 to mean 10%).
+    expect(() => countCompletedFluctuations([100, 110], 1)).toThrow(RangeError);
+    expect(() => countCompletedFluctuations([100, 110], 10)).toThrow(
       RangeError,
     );
   });

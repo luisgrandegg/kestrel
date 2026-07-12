@@ -175,7 +175,6 @@ function validateConfig(config: KestrelConfig): void {
   const nonNegativeIntegers: Array<[string, unknown]> = [
     ["minAnalysts", config.minAnalysts],
     ["fluctuation.minOccurrences", config.fluctuation.minOccurrences],
-    ["fluctuation.lookbackTradingDays", config.fluctuation.lookbackTradingDays],
     ["earnings.windowDays", config.earnings.windowDays],
     ["exDividend.windowDays", config.exDividend.windowDays],
     ["ingestion.backfillLookbackDays", config.ingestion.backfillLookbackDays],
@@ -189,8 +188,33 @@ function validateConfig(config: KestrelConfig): void {
       );
     }
   }
+  // The fluctuation metric needs at least 2 closes to ever count anything,
+  // and ingestion promotes instruments to "ready" once history covers this
+  // window — 0/1 would silently disable Category 1 (CONSTITUTION.md §6).
+  const lookback = config.fluctuation.lookbackTradingDays;
+  if (
+    typeof lookback !== "number" ||
+    !Number.isInteger(lookback) ||
+    lookback < 2
+  ) {
+    throw new Error(
+      `Config key "fluctuation.lookbackTradingDays" must be an integer >= 2, got: ${JSON.stringify(lookback)}`,
+    );
+  }
+  // θ is a ratio: 0.10 means 10%. θ >= 1 can never be confirmed by positive
+  // prices, so the metric would silently count 0 for every series.
+  const swing = config.fluctuation.swingPct;
+  if (
+    typeof swing !== "number" ||
+    !Number.isFinite(swing) ||
+    swing <= 0 ||
+    swing >= 1
+  ) {
+    throw new Error(
+      `Config key "fluctuation.swingPct" must be a ratio in (0, 1) — e.g. 0.1 for 10% — got: ${JSON.stringify(swing)}`,
+    );
+  }
   const positiveRatios: Array<[string, unknown]> = [
-    ["fluctuation.swingPct", config.fluctuation.swingPct],
     [
       "screens.category1.upsideThreshold",
       config.screens.category1.upsideThreshold,

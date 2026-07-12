@@ -50,6 +50,13 @@ export interface DailyClose {
   ticker: string;
   /** Trading date the close belongs to. */
   date: IsoDate;
+  /**
+   * Closing price in the instrument's native currency. Always a positive,
+   * finite number: adapters must reject zero/negative/non-finite closes at
+   * the provider boundary, before storage (CLAUDE.md guardrail 6) — storage
+   * is append-only, so a bad close, once persisted, can never be removed
+   * and would poison every metric window containing it.
+   */
   close: number;
 }
 

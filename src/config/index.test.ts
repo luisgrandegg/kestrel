@@ -98,8 +98,24 @@ describe("resolveConfig", () => {
       /"minAnalysts" must be a non-negative integer/,
     );
     expect(() => resolveConfig({ fluctuation: { swingPct: 0 } })).toThrow(
-      /"fluctuation.swingPct" must be a positive finite number/,
+      /"fluctuation.swingPct" must be a ratio in \(0, 1\)/,
     );
+    // A percent-style value (10 meaning 10%) must fail loudly: θ >= 1 would
+    // silently zero the fluctuation metric for every series.
+    expect(() => resolveConfig({ fluctuation: { swingPct: 10 } })).toThrow(
+      /"fluctuation.swingPct" must be a ratio in \(0, 1\)/,
+    );
+    expect(() => resolveConfig({ fluctuation: { swingPct: 1 } })).toThrow(
+      /"fluctuation.swingPct" must be a ratio in \(0, 1\)/,
+    );
+    // Lookback windows of 0/1 closes can never confirm a fluctuation and
+    // would mark instruments "ready" with no history.
+    expect(() =>
+      resolveConfig({ fluctuation: { lookbackTradingDays: 1 } }),
+    ).toThrow(/"fluctuation.lookbackTradingDays" must be an integer >= 2/);
+    expect(() =>
+      resolveConfig({ fluctuation: { lookbackTradingDays: 0 } }),
+    ).toThrow(/"fluctuation.lookbackTradingDays" must be an integer >= 2/);
     expect(() =>
       resolveConfig({
         screens: { category2: { upsideThreshold: Number.NaN } },

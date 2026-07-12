@@ -18,9 +18,12 @@ export function countCompletedFluctuations(
   closes: readonly number[],
   swingPct: number,
 ): number {
-  if (!Number.isFinite(swingPct) || swingPct <= 0) {
+  if (!Number.isFinite(swingPct) || swingPct <= 0 || swingPct >= 1) {
+    // θ ≥ 1 would make confirmation mathematically impossible (a ≤ −θ
+    // reversal needs price ≤ (1−θ)·extreme ≤ 0) and silently zero the
+    // metric — reject it loudly instead (CONSTITUTION.md §6).
     throw new RangeError(
-      `swingPct (θ) must be a positive finite ratio, got: ${swingPct}`,
+      `swingPct (θ) must be a ratio in (0, 1) — e.g. 0.10 for 10% — got: ${swingPct}`,
     );
   }
   for (const close of closes) {
@@ -31,7 +34,8 @@ export function countCompletedFluctuations(
     }
   }
 
-  if (closes.length < 2) {
+  const first = closes[0];
+  if (closes.length < 2 || first === undefined) {
     return 0;
   }
 
@@ -39,7 +43,7 @@ export function countCompletedFluctuations(
   // 0 = direction undetermined, +1 = up-leg pending, -1 = down-leg pending.
   let direction: 0 | 1 | -1 = 0;
   // Running extreme of the current (pending) leg.
-  let extreme = closes[0] as number;
+  let extreme: number = first;
 
   for (const price of closes.slice(1)) {
     if (direction === 0) {
