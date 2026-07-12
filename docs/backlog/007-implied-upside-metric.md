@@ -15,8 +15,8 @@ The base-predicate input every screen shares, as a pure, test-covered function.
 
 ## Acceptance criteria
 
-- [ ] Formula tests over fixtures, written before/with the implementation.
-- [ ] `numAnalysts` below the gate → explicit "not qualified" result, tested.
-- [ ] Zero/near-zero price and missing-field cases tested and handled loudly.
-- [ ] `minAnalysts` read from config, not hardcoded.
-- [ ] Completing 005–007 satisfies the M1 Definition of Done.
+- [x] Formula tests over fixtures, written before/with the implementation.
+- [x] `numAnalysts` below the gate → explicit "not qualified" result, tested.
+- [x] Zero/near-zero price and missing-field cases tested and handled loudly.
+- [x] `minAnalysts` read from config, not hardcoded.
+- [x] Completing 005–007 satisfies the M1 Definition of Done.
