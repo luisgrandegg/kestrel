@@ -16,5 +16,5 @@ The explicitly-typed data contracts every seam exchanges, so a provider returnin
 
 ## Acceptance criteria
 
-- [ ] All four capability names and four DTOs exist and compile.
-- [ ] No provider-specific naming appears in shared types (guardrail 1 / `CONSTITUTION.md` §2.3).
+- [x] All four capability names and four DTOs exist and compile.
+- [x] No provider-specific naming appears in shared types (guardrail 1 / `CONSTITUTION.md` §2.3).
