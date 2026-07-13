@@ -19,6 +19,11 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 ## Acceptance criteria
 
 - [ ] The Action runs the throttled daily pipeline on schedule and persists results.
-- [ ] A manually re-triggered run on the same day changes nothing (idempotency observed end-to-end).
-- [ ] Watchlist-addition docs exist and match item 011's mechanism.
+  *Wired and end-to-end tested with a fake provider; the scheduled run currently
+  skips ingestion (loudly) and renders all screens disabled because no live
+  provider exists yet — ticks when item 010 registers the Yahoo adapter in
+  `src/app/providers.ts`.*
+- [x] A manually re-triggered run on the same day changes nothing (idempotency observed end-to-end).
+- [x] Watchlist-addition docs exist and match item 011's mechanism.
 - [ ] M7 — and with it the whole-MVP Definition of Done in `CLAUDE.md` — can be checked off.
+  *Blocked on item 010 (awaiting the four recorded spec decisions).*

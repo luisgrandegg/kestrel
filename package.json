@@ -2,7 +2,7 @@
   "name": "kestrel",
   "version": "0.1.0",
   "private": true,
-  "description": "A watchlist that waits and flags mechanically defined opportunities — research candidates, never recommendations.",
+  "description": "A watchlist that waits and flags mechanically defined opportunities \u2014 research candidates, never recommendations.",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -13,6 +13,8 @@
     "url": "https://github.com/luisgrandegg/kestrel"
   },
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "daily": "pnpm build && node dist/app/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
