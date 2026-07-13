@@ -21,6 +21,6 @@ Category 2: undervalued instruments with an earnings report coming up inside the
 
 ## Acceptance criteria
 
-- [ ] `daysToEvent` unit-tested: upcoming inside window, at the boundary (0 and `windowDays`), outside window, and **past date → excluded**.
-- [ ] Given fixture storage, returns exactly the right matches.
-- [ ] Screen disables with the missing capability named when `earningsCalendar` is unserved.
+- [x] `daysToEvent` unit-tested: upcoming inside window, at the boundary (0 and `windowDays`), outside window, and **past date → excluded**.
+- [x] Given fixture storage, returns exactly the right matches.
+- [x] Screen disables with the missing capability named when `earningsCalendar` is unserved.
