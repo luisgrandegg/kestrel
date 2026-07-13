@@ -16,6 +16,6 @@ Category 3: undervalued instruments with an ex-dividend date coming up inside th
 
 ## Acceptance criteria
 
-- [ ] Given fixture storage, returns exactly the right matches, including boundary and past-date exclusion cases.
-- [ ] Screen disables with the missing capability named when `dividendCalendar` is unserved.
-- [ ] Completing 014–017 satisfies the M5 Definition of Done.
+- [x] Given fixture storage, returns exactly the right matches, including boundary and past-date exclusion cases.
+- [x] Screen disables with the missing capability named when `dividendCalendar` is unserved.
+- [x] Completing 014–017 satisfies the M5 Definition of Done.
