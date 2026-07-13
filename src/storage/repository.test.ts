@@ -55,16 +55,45 @@ describe("prices — append-only, insert-or-ignore", () => {
     expect(r.latestClose("MISSING")).toBeUndefined();
   });
 
-  it("rejects non-positive closes at the schema level (DailyClose contract)", () => {
+  it("rejects non-positive and non-finite closes (DailyClose contract)", () => {
     const r = repo();
-    expect(() =>
-      r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: 0 }]),
-    ).toThrow();
-    expect(() =>
-      r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: -5 }]),
-    ).toThrow();
-    // The failed batch rolled back atomically.
+    for (const close of [0, -5, Number.POSITIVE_INFINITY, Number.NaN]) {
+      expect(() =>
+        r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close }]),
+      ).toThrow(RangeError);
+    }
+    // Nothing was persisted by any rejected write.
     expect(r.getCloses("ACME")).toHaveLength(0);
+  });
+
+  it("lastNCloses returns the trailing n closes chronologically, honoring asOf", () => {
+    const r = repo();
+    r.insertCloses([
+      { ticker: "ACME", date: "2026-07-08", close: 100 },
+      { ticker: "ACME", date: "2026-07-09", close: 101 },
+      { ticker: "ACME", date: "2026-07-10", close: 102 },
+      { ticker: "ACME", date: "2026-07-11", close: 103 },
+    ]);
+    expect(r.lastNCloses("ACME", 2).map((c) => c.close)).toEqual([102, 103]);
+    // asOf bounds the window with no lookahead.
+    expect(r.lastNCloses("ACME", 2, "2026-07-10").map((c) => c.close)).toEqual([
+      101, 102,
+    ]);
+    // n larger than history returns everything; n = 0 returns nothing.
+    expect(r.lastNCloses("ACME", 10)).toHaveLength(4);
+    expect(r.lastNCloses("ACME", 0)).toEqual([]);
+    expect(() => r.lastNCloses("ACME", -1)).toThrow(RangeError);
+    expect(() => r.lastNCloses("ACME", 2.5)).toThrow(RangeError);
+  });
+
+  it("latestClose honors an as-of bound (no lookahead)", () => {
+    const r = repo();
+    r.insertCloses([
+      { ticker: "ACME", date: "2026-07-10", close: 101 },
+      { ticker: "ACME", date: "2026-07-12", close: 103 },
+    ]);
+    expect(r.latestClose("ACME", "2026-07-11")?.close).toBe(101);
+    expect(r.latestClose("ACME", "2026-07-09")).toBeUndefined();
   });
 
   it("a batch is atomic: one bad row rolls back the whole batch", () => {
@@ -102,7 +131,7 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
     });
   });
 
-  it("latestAnalystSnapshot returns max(as_of) while prior rows stay readable via history", () => {
+  it("latestAnalystSnapshot returns max(as_of); prior rows stay readable through the as-of bound", () => {
     const r = repo();
     r.insertAnalystSnapshot({
       ticker: "ACME",
@@ -117,6 +146,15 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
       numAnalysts: 9,
     });
     expect(r.latestAnalystSnapshot("ACME")?.medianTarget).toBe(130);
+    // The prior observation is still readable: "what did this look like on
+    // date X" (CONSTITUTION §3.1-3.2) — the no-lookahead bounded read.
+    expect(r.latestAnalystSnapshot("ACME", "2026-07-05")).toEqual({
+      ticker: "ACME",
+      asOf: "2026-07-01",
+      medianTarget: 110,
+      numAnalysts: 7,
+    });
+    expect(r.latestAnalystSnapshot("ACME", "2026-06-30")).toBeUndefined();
     // Inserting an older as_of later never displaces the latest.
     r.insertAnalystSnapshot({
       ticker: "ACME",
@@ -125,6 +163,39 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
       numAnalysts: 5,
     });
     expect(r.latestAnalystSnapshot("ACME")?.asOf).toBe("2026-07-10");
+    expect(r.latestAnalystSnapshot("ACME", "2026-06-20")?.medianTarget).toBe(
+      90,
+    );
+  });
+
+  it("earnings and dividend snapshots honor the as-of bound too", () => {
+    const r = repo();
+    r.insertEarningsSnapshot({
+      ticker: "ACME",
+      asOf: "2026-07-01",
+      nextEarningsDate: "2026-07-20",
+    });
+    r.insertEarningsSnapshot({
+      ticker: "ACME",
+      asOf: "2026-07-10",
+      nextEarningsDate: "2026-10-20",
+    });
+    expect(
+      r.latestEarningsSnapshot("ACME", "2026-07-05")?.nextEarningsDate,
+    ).toBe("2026-07-20");
+    r.insertDividendSnapshot({
+      ticker: "ACME",
+      asOf: "2026-07-01",
+      nextExDivDate: "2026-07-15",
+    });
+    r.insertDividendSnapshot({
+      ticker: "ACME",
+      asOf: "2026-07-10",
+      nextExDivDate: "2026-10-15",
+    });
+    expect(r.latestDividendSnapshot("ACME", "2026-07-05")?.nextExDivDate).toBe(
+      "2026-07-15",
+    );
   });
 
   it("earnings and dividend snapshots behave the same, including null event dates", () => {
