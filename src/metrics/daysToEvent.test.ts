@@ -28,7 +28,13 @@ describe("daysToEvent — MVP.md §5.3 event proximity", () => {
     expect(() => daysToEvent("2026-8-1", "2026-07-31")).toThrow(RangeError);
     expect(() => daysToEvent("2026-08-01", "2026-7-31")).toThrow(RangeError);
     // Well-formed but not a real calendar date: must not silently roll over
-    // into March.
+    // into March (V8's ISO parsing would).
     expect(() => daysToEvent("2026-02-30", "2026-02-01")).toThrow(RangeError);
+    // Feb 29 in a non-leap year.
+    expect(() => daysToEvent("2026-02-29", "2026-02-01")).toThrow(RangeError);
+  });
+
+  it("years below 0100 are real dates — no two-digit-year rule", () => {
+    expect(daysToEvent("0026-08-14", "0026-07-31")).toBe(14);
   });
 });

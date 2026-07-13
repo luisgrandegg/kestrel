@@ -4,6 +4,7 @@ import { resolveConfig } from "../config/index.js";
 import { ProviderRegistry } from "../providers/registry.js";
 import { Repository } from "../storage/repository.js";
 import { providerWith } from "../test-support/fakeProvider.js";
+import { instrumentSnapshot } from "../test-support/instrumentSnapshot.js";
 import type { IsoDate } from "../types/index.js";
 import { makeCategory2Screen } from "./category2.js";
 import type { InstrumentSnapshot } from "./screen.js";
@@ -15,17 +16,11 @@ const TARGET = 130;
 const snapshot = (
   nextEarningsDate: IsoDate | null,
   overrides: Partial<InstrumentSnapshot> = {},
-): InstrumentSnapshot => ({
-  ticker: "ACME",
-  currency: "USD",
-  asOf: ASOF,
-  latestClose: { ticker: "ACME", date: ASOF, close: 100 },
-  analyst: { ticker: "ACME", asOf: ASOF, medianTarget: TARGET, numAnalysts: 8 },
-  earnings: { ticker: "ACME", asOf: ASOF, nextEarningsDate },
-  dividend: null,
-  closes: [{ ticker: "ACME", date: ASOF, close: 100 }],
-  ...overrides,
-});
+): InstrumentSnapshot =>
+  instrumentSnapshot({
+    earnings: { ticker: "ACME", asOf: ASOF, nextEarningsDate },
+    ...overrides,
+  });
 
 describe("category 2 — pre-earnings + undervalued (MVP.md §6 row 2)", () => {
   it("matches BASE with earnings inside the window, carrying the §8 row numbers", () => {
@@ -102,6 +97,15 @@ describe("category 2 — pre-earnings + undervalued (MVP.md §6 row 2)", () => {
     );
     expect(screen.evaluate(snapshot("2026-08-10"))).toBeNull();
     expect(screen.evaluate(snapshot("2026-08-07"))).not.toBeNull();
+  });
+
+  it("reads ITS OWN upsideThreshold: a category2-only override excludes the 30%-upside fixture", () => {
+    // Guards the copy-paste hazard screen.ts warns about: with identical
+    // defaults, reading category1's config path would keep this green.
+    const screen = makeCategory2Screen(
+      resolveConfig({ screens: { category2: { upsideThreshold: 0.4 } } }),
+    );
+    expect(screen.evaluate(snapshot("2026-08-07"))).toBeNull();
   });
 });
 

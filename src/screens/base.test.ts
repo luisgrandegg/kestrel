@@ -1,26 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../config/index.js";
+import { instrumentSnapshot as snapshot } from "../test-support/instrumentSnapshot.js";
 import { evaluateBase } from "./base.js";
-import type { InstrumentSnapshot } from "./screen.js";
-
-const snapshot = (
-  overrides: Partial<InstrumentSnapshot> = {},
-): InstrumentSnapshot => ({
-  ticker: "ACME",
-  currency: "USD",
-  asOf: "2026-07-10",
-  latestClose: { ticker: "ACME", date: "2026-07-10", close: 100 },
-  analyst: {
-    ticker: "ACME",
-    asOf: "2026-07-09",
-    medianTarget: 130,
-    numAnalysts: 8,
-  },
-  earnings: null,
-  dividend: null,
-  closes: [],
-  ...overrides,
-});
 
 describe("evaluateBase — MVP.md §6 base predicate", () => {
   it("matches when numAnalysts >= minAnalysts and impliedUpside >= threshold, carrying the supporting numbers", () => {

@@ -286,6 +286,15 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
         nextEarningsDate: "2026-7-20",
       }),
     ).toThrow(RangeError);
+    // Well-formed but impossible: reading it back through daysToEvent would
+    // otherwise crash every screen evaluation, forever (append-only).
+    expect(() =>
+      r.insertEarningsSnapshot({
+        ticker: "ACME",
+        asOf: "2026-07-10",
+        nextEarningsDate: "2026-02-30",
+      }),
+    ).toThrow(RangeError);
     expect(() =>
       r.insertDividendSnapshot({
         ticker: "ACME",
