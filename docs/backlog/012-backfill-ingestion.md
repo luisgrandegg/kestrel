@@ -19,10 +19,12 @@ Backfill ~1 year (`backfillLookbackDays`, default 365) of daily closes per instr
 
 The runner wires the persistent failure streak: `Repository.incrementFailures` on each adapter failure, feeding `recordFailure` for the error transition at `ingestion.maxConsecutiveFailures`; `resetFailures` on any successful fetch. Whether/when `error` instruments are retried is a design point to settle here (sticky-error decision recorded on item 011).
 
+**Sequencing note:** completed against fake providers while declared dependency 010 (M3) remains blocked on its recorded open questions — the same deliberate deviation from the README's top-to-bottom order recorded on item 011.
+
 ## Acceptance criteria
 
-- [ ] Idempotency test: running backfill twice produces identical storage (row counts unchanged).
-- [ ] Mid-run-resume test: kill/abort partway, re-run, end state correct with no duplicates.
-- [ ] A capped/slow fake provider backfills across multiple runs without duplication.
-- [ ] Inter-call delay verifiably applied (injectable sleep/clock for tests).
-- [ ] Failure accounting: increment-on-failure / reset-on-success / demote-at-threshold, tested across simulated runs.
+- [x] Idempotency test: running backfill twice produces identical storage (row counts unchanged).
+- [x] Mid-run-resume test: kill/abort partway, re-run, end state correct with no duplicates.
+- [x] A capped/slow fake provider backfills across multiple runs without duplication.
+- [x] Inter-call delay verifiably applied (injectable sleep/clock for tests).
+- [x] Failure accounting: increment-on-failure / reset-on-success / demote-at-threshold, tested across simulated runs.

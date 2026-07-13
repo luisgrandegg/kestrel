@@ -90,14 +90,21 @@ export function registerWatchlist(
 }
 
 /**
+ * Watchlist instruments in sticky `error` state (skipped by runs; reported
+ * so a dead watchlist is never silent — sticky-error decision on 011).
+ */
+export function erroredInstruments(
+  repo: Repository,
+  watchlist: readonly string[],
+): Instrument[] {
+  const active = new Set(watchlist.map(normalizeTicker));
+  return repo.listInstruments("error").filter((i) => active.has(i.ticker));
+}
+
+/**
  * Instruments the daily run should touch: watchlist ∩ instruments, minus
- * `error` instruments (repeated failures stop consuming throttled calls
- * until someone intervenes — sticky-error decision on backlog 011).
- * Removed tickers stop syncing; their history stays.
- *
- * Throws on watchlist tickers with no instruments row: that can only mean
- * `registerWatchlist` was not called first, and silently skipping them
- * would mean a newly added ticker never syncs, with no signal anywhere.
+ * `error` instruments — see {@link erroredInstruments}, which runs report
+ * for visibility.
  */
 export function syncableInstruments(
   repo: Repository,
