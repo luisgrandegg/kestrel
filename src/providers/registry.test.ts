@@ -6,7 +6,7 @@ import type {
   DividendSnapshot,
   EarningsSnapshot,
 } from "../types/index.js";
-import type { Provider } from "./provider.js";
+import { CAPABILITY_METHODS, type Provider } from "./provider.js";
 import { ProviderRegistry } from "./registry.js";
 
 /**
@@ -23,10 +23,16 @@ const fetches = {
   getNextExDividend: () => Promise.resolve({} as DividendSnapshot),
 };
 
+/** A fake implementing exactly the methods its advertised capabilities require. */
 const fake = (id: string, ...capabilities: Capability[]): Provider => ({
   id,
   capabilities: new Set(capabilities),
-  ...fetches,
+  ...Object.fromEntries(
+    capabilities.map((c) => [
+      CAPABILITY_METHODS[c],
+      fetches[CAPABILITY_METHODS[c]],
+    ]),
+  ),
 });
 
 describe("ProviderRegistry — capability resolution", () => {
@@ -62,7 +68,7 @@ describe("ProviderRegistry — capability resolution", () => {
 describe("ProviderRegistry — screen resolution (guardrail 4)", () => {
   it("enables a screen whose required capabilities are all served", () => {
     const registry = new ProviderRegistry([
-      fake("yahoo-like", "closes", "analystTargets"),
+      fake("full-service", "closes", "analystTargets"),
     ]);
     expect(registry.resolveScreen(["closes", "analystTargets"])).toEqual({
       enabled: true,

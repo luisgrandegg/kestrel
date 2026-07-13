@@ -1,4 +1,4 @@
-import type { Capability } from "../types/index.js";
+import type { Capability, ScreenResolution } from "../types/index.js";
 import { CAPABILITY_METHODS, type Provider } from "./provider.js";
 
 /**
@@ -9,9 +9,7 @@ import { CAPABILITY_METHODS, type Provider } from "./provider.js";
  * disabled with the missing capabilities named — never silently skipped.
  */
 
-export type ScreenResolution =
-  | { readonly enabled: true }
-  | { readonly enabled: false; readonly missing: readonly Capability[] };
+export type { ScreenResolution };
 
 export class ProviderRegistry {
   private readonly providers: readonly Provider[];
@@ -53,7 +51,7 @@ export class ProviderRegistry {
    * missing capability named (CONSTITUTION.md §2.1, guardrail 4).
    */
   resolveScreen(required: readonly Capability[]): ScreenResolution {
-    const missing = required.filter((c) => !this.isServed(c));
+    const missing = [...new Set(required)].filter((c) => !this.isServed(c));
     return missing.length === 0
       ? { enabled: true }
       : { enabled: false, missing };

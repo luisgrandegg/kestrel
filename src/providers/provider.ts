@@ -18,6 +18,12 @@ import type {
 export interface Provider {
   id: string;
   capabilities: ReadonlySet<Capability>;
+  /**
+   * Daily closes for calendar dates in [from, to] — BOTH bounds inclusive,
+   * matching Repository.getCloses. Adapters must normalize provider quirks
+   * (e.g. an exclusive end timestamp) to this contract, or every daily
+   * incremental fetch silently runs one trading day stale.
+   */
   getCloses?(ticker: string, from: IsoDate, to: IsoDate): Promise<DailyClose[]>;
   getAnalystTargets?(ticker: string): Promise<AnalystSnapshot>;
   getNextEarnings?(ticker: string): Promise<EarningsSnapshot>;
@@ -30,4 +36,7 @@ export const CAPABILITY_METHODS = {
   analystTargets: "getAnalystTargets",
   earningsCalendar: "getNextEarnings",
   dividendCalendar: "getNextExDividend",
-} as const satisfies Record<Capability, keyof Provider>;
+} as const satisfies Record<
+  Capability,
+  "getCloses" | "getAnalystTargets" | "getNextEarnings" | "getNextExDividend"
+>;
