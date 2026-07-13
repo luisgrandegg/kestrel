@@ -15,7 +15,7 @@ The core contract: providers advertise capabilities, screens declare required ca
 
 ## Acceptance criteria
 
-- [ ] Contract tests with fake providers: capability → provider resolution, ordered lists, one provider serving many capabilities, one capability served by many providers.
-- [ ] Test: a screen with an unserved capability is reported **disabled with the missing capability named**.
-- [ ] Test: a screen with all capabilities served resolves and is enabled.
-- [ ] Registry code contains no provider-specific names.
+- [x] Contract tests with fake providers: capability → provider resolution, ordered lists, one provider serving many capabilities, one capability served by many providers.
+- [x] Test: a screen with an unserved capability is reported **disabled with the missing capability named**.
+- [x] Test: a screen with all capabilities served resolves and is enabled.
+- [x] Registry code contains no provider-specific names.
