@@ -97,9 +97,9 @@ describe("runDailyPipeline — the scheduled entrypoint (backlog 019)", () => {
     expect(third.dashboard).toBe(second.dashboard);
     const repo = new Repository(paths.db);
     try {
-      expect(repo.getCloses("ACME")).toHaveLength(SERIES.length);
+      expect(await repo.getCloses("ACME")).toHaveLength(SERIES.length);
     } finally {
-      repo.close();
+      await repo.close();
     }
   });
 

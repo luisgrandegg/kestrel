@@ -1,4 +1,4 @@
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { DailyClose, IsoDate } from "../types/index.js";
 import { addDays } from "./dates.js";
 import { ProviderCallError, type Throttle } from "./throttle.js";
@@ -20,14 +20,14 @@ export type FetchCloses = (
  * empty return is a legitimate no-op (weekends/holidays).
  */
 export async function syncPrices(
-  repo: Repository,
+  repo: StorageRepository,
   fetchCloses: FetchCloses,
   throttle: Throttle,
   ticker: string,
   today: IsoDate,
   backfillLookbackDays: number,
 ): Promise<void> {
-  const latest = repo.latestClose(ticker, today);
+  const latest = await repo.latestClose(ticker, today);
   const from =
     latest === undefined
       ? addDays(today, -backfillLookbackDays)
@@ -35,11 +35,11 @@ export async function syncPrices(
   if (from <= today) {
     const closes = await throttle(() => fetchCloses(ticker, from, today));
     validateProviderCloses(ticker, today, closes);
-    repo.insertCloses(closes);
+    await repo.insertCloses(closes);
   }
   // Attempt marker only — never a coverage watermark (a capped fetch still
   // stamps today). The incremental cursor is always latestClose.
-  repo.recordPriceSync(ticker, today);
+  await repo.recordPriceSync(ticker, today);
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

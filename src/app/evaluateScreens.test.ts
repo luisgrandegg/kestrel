@@ -30,31 +30,36 @@ const makeBaseScreen = (config: KestrelConfig): Screen<BaseMatch> => ({
     ),
 });
 
-const seed = (
+const seed = async (
   repo: Repository,
   ticker: string,
   close: number,
   medianTarget: number,
   numAnalysts: number,
-): void => {
-  repo.addInstrument(ticker, "2026-01-01");
-  repo.insertCloses([{ ticker, date: ASOF, close }]);
-  repo.insertAnalystSnapshot({ ticker, asOf: ASOF, medianTarget, numAnalysts });
-  repo.setInstrumentState(ticker, "ready");
+): Promise<void> => {
+  await repo.addInstrument(ticker, "2026-01-01");
+  await repo.insertCloses([{ ticker, date: ASOF, close }]);
+  await repo.insertAnalystSnapshot({
+    ticker,
+    asOf: ASOF,
+    medianTarget,
+    numAnalysts,
+  });
+  await repo.setInstrumentState(ticker, "ready");
 };
 
 describe("evaluateScreens — harness over fixture storage (backlog 014)", () => {
-  it("evaluates enabled screens over ready instruments and returns matches with supporting numbers", () => {
+  it("evaluates enabled screens over ready instruments and returns matches with supporting numbers", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "HIT", 100, 130, 8); // 30% upside, qualifies
-    seed(repo, "MISS", 100, 105, 8); // 5% upside, fails threshold
-    seed(repo, "THIN", 100, 200, 2); // fails analyst gate
+    await seed(repo, "HIT", 100, 130, 8); // 30% upside, qualifies
+    await seed(repo, "MISS", 100, 105, 8); // 5% upside, fails threshold
+    await seed(repo, "THIN", 100, 200, 2); // fails analyst gate
 
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -75,13 +80,13 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
     ]);
   });
 
-  it("reports a screen with unserved capabilities as disabled with the missing capability named, and evaluates nothing for it", () => {
+  it("reports a screen with unserved capabilities as disabled with the missing capability named, and evaluates nothing for it", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "HIT", 100, 130, 8);
+    await seed(repo, "HIT", 100, 130, 8);
     const registry = new ProviderRegistry([providerWith("closes")]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -95,36 +100,42 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
     expect(result?.matches).toEqual([]);
   });
 
-  it("bounds every observation read by the as-of date (the instrument set itself reflects current lifecycle state)", () => {
+  it("bounds every observation read by the as-of date (the instrument set itself reflects current lifecycle state)", async () => {
     const repo = new Repository(":memory:");
-    repo.addInstrument("ACME", "2026-01-01");
-    repo.insertCloses([
+    await repo.addInstrument("ACME", "2026-01-01");
+    await repo.insertCloses([
       { ticker: "ACME", date: "2026-07-01", close: 100 },
       { ticker: "ACME", date: ASOF, close: 200 },
     ]);
-    repo.insertAnalystSnapshot({
+    await repo.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-07-01",
       medianTarget: 130, // 30% upside vs the 100 close of that date
       numAnalysts: 8,
     });
-    repo.insertAnalystSnapshot({
+    await repo.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: ASOF,
       medianTarget: 210, // 5% upside vs the 200 close: no match today
       numAnalysts: 8,
     });
-    repo.setInstrumentState("ACME", "ready");
+    await repo.setInstrumentState("ACME", "ready");
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
     const screens = [makeBaseScreen(config)];
 
-    const [today] = evaluateScreens(repo, registry, config, screens, ASOF);
+    const [today] = await evaluateScreens(
+      repo,
+      registry,
+      config,
+      screens,
+      ASOF,
+    );
     expect(today?.matches).toEqual([]);
 
-    const [past] = evaluateScreens(
+    const [past] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -135,9 +146,9 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
     expect(past?.matches[0]?.latestClose).toBe(100);
   });
 
-  it("rejects a malformed as-of date loudly instead of silently reading the future", () => {
+  it("rejects a malformed as-of date loudly instead of silently reading the future", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "ACME", 100, 130, 8);
+    await seed(repo, "ACME", 100, 130, 8);
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
@@ -145,7 +156,7 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
 
     // "2026-7-1" sorts AFTER every zero-padded 2026-07-xx date; unchecked,
     // it would read months past the intended bound (guardrail 2).
-    expect(() =>
+    await expect(
       evaluateScreens(
         repo,
         registry,
@@ -153,18 +164,18 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
         [makeBaseScreen(config)],
         "2026-7-1",
       ),
-    ).toThrow(RangeError);
+    ).rejects.toThrow(RangeError);
   });
 
-  it("instruments with no data as of the evaluation date are skipped, not fabricated", () => {
+  it("instruments with no data as of the evaluation date are skipped, not fabricated", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "ACME", 100, 130, 8);
+    await seed(repo, "ACME", 100, 130, 8);
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
     // Evaluate before any stored data existed.
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -175,15 +186,15 @@ describe("evaluateScreens — harness over fixture storage (backlog 014)", () =>
     expect(result?.matches).toEqual([]);
   });
 
-  it("buildSnapshots + evaluateScreen let heterogeneous screens share one snapshot read, each keeping its own match type", () => {
+  it("buildSnapshots + evaluateScreen let heterogeneous screens share one snapshot read, each keeping its own match type", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "HIT", 100, 130, 8);
+    await seed(repo, "HIT", 100, 130, 8);
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
 
-    const snapshots = buildSnapshots(repo, config, ASOF);
+    const snapshots = await buildSnapshots(repo, config, ASOF);
     const base = evaluateScreen(snapshots, registry, makeBaseScreen(config));
     const tickersOnly = evaluateScreen(snapshots, registry, {
       id: "tickers-only",

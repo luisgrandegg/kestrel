@@ -10,139 +10,145 @@ import { Repository } from "./repository.js";
 const repo = () => new Repository(":memory:");
 
 describe("prices — append-only, insert-or-ignore", () => {
-  it("writing the same (ticker, date) twice is a no-op that keeps the original value", () => {
+  it("writing the same (ticker, date) twice is a no-op that keeps the original value", async () => {
     const r = repo();
-    r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: 100 }]);
-    r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: 999 }]);
-    const closes = r.getCloses("ACME");
+    await r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: 100 }]);
+    await r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close: 999 }]);
+    const closes = await r.getCloses("ACME");
     expect(closes).toHaveLength(1);
     expect(closes[0]?.close).toBe(100);
   });
 
-  it("returns chronological closes, optionally bounded inclusively", () => {
+  it("returns chronological closes, optionally bounded inclusively", async () => {
     const r = repo();
-    r.insertCloses([
+    await r.insertCloses([
       { ticker: "ACME", date: "2026-07-12", close: 103 },
       { ticker: "ACME", date: "2026-07-10", close: 101 },
       { ticker: "ACME", date: "2026-07-11", close: 102 },
       { ticker: "OTHER", date: "2026-07-10", close: 55 },
     ]);
-    expect(r.getCloses("ACME").map((c) => c.date)).toEqual([
+    expect((await r.getCloses("ACME")).map((c) => c.date)).toEqual([
       "2026-07-10",
       "2026-07-11",
       "2026-07-12",
     ]);
     expect(
-      r.getCloses("ACME", "2026-07-11", "2026-07-12").map((c) => c.close),
+      (await r.getCloses("ACME", "2026-07-11", "2026-07-12")).map(
+        (c) => c.close,
+      ),
     ).toEqual([102, 103]);
-    expect(r.getCloses("ACME", "2026-07-11").map((c) => c.close)).toEqual([
-      102, 103,
-    ]);
+    expect(
+      (await r.getCloses("ACME", "2026-07-11")).map((c) => c.close),
+    ).toEqual([102, 103]);
   });
 
-  it("latestClose returns the max(date) row", () => {
+  it("latestClose returns the max(date) row", async () => {
     const r = repo();
-    r.insertCloses([
+    await r.insertCloses([
       { ticker: "ACME", date: "2026-07-10", close: 101 },
       { ticker: "ACME", date: "2026-07-12", close: 103 },
       { ticker: "ACME", date: "2026-07-11", close: 102 },
     ]);
-    expect(r.latestClose("ACME")).toEqual({
+    expect(await r.latestClose("ACME")).toEqual({
       ticker: "ACME",
       date: "2026-07-12",
       close: 103,
     });
-    expect(r.latestClose("MISSING")).toBeUndefined();
+    expect(await r.latestClose("MISSING")).toBeUndefined();
   });
 
-  it("rejects non-positive and non-finite closes (DailyClose contract)", () => {
+  it("rejects non-positive and non-finite closes (DailyClose contract)", async () => {
     const r = repo();
     for (const close of [0, -5, Number.POSITIVE_INFINITY, Number.NaN]) {
-      expect(() =>
+      await expect(
         r.insertCloses([{ ticker: "ACME", date: "2026-07-10", close }]),
-      ).toThrow(RangeError);
+      ).rejects.toThrow(RangeError);
     }
     // Nothing was persisted by any rejected write.
-    expect(r.getCloses("ACME")).toHaveLength(0);
+    expect(await r.getCloses("ACME")).toHaveLength(0);
   });
 
-  it("lastNCloses returns the trailing n closes chronologically, honoring asOf", () => {
+  it("lastNCloses returns the trailing n closes chronologically, honoring asOf", async () => {
     const r = repo();
-    r.insertCloses([
+    await r.insertCloses([
       { ticker: "ACME", date: "2026-07-08", close: 100 },
       { ticker: "ACME", date: "2026-07-09", close: 101 },
       { ticker: "ACME", date: "2026-07-10", close: 102 },
       { ticker: "ACME", date: "2026-07-11", close: 103 },
     ]);
-    expect(r.lastNCloses("ACME", 2).map((c) => c.close)).toEqual([102, 103]);
-    // asOf bounds the window with no lookahead.
-    expect(r.lastNCloses("ACME", 2, "2026-07-10").map((c) => c.close)).toEqual([
-      101, 102,
+    expect((await r.lastNCloses("ACME", 2)).map((c) => c.close)).toEqual([
+      102, 103,
     ]);
+    // asOf bounds the window with no lookahead.
+    expect(
+      (await r.lastNCloses("ACME", 2, "2026-07-10")).map((c) => c.close),
+    ).toEqual([101, 102]);
     // n larger than history returns everything; n = 0 returns nothing.
-    expect(r.lastNCloses("ACME", 10)).toHaveLength(4);
-    expect(r.lastNCloses("ACME", 0)).toEqual([]);
-    expect(() => r.lastNCloses("ACME", -1)).toThrow(RangeError);
-    expect(() => r.lastNCloses("ACME", 2.5)).toThrow(RangeError);
+    expect(await r.lastNCloses("ACME", 10)).toHaveLength(4);
+    expect(await r.lastNCloses("ACME", 0)).toEqual([]);
+    await expect(r.lastNCloses("ACME", -1)).rejects.toThrow(RangeError);
+    await expect(r.lastNCloses("ACME", 2.5)).rejects.toThrow(RangeError);
   });
 
-  it("latestClose honors an as-of bound (no lookahead)", () => {
+  it("latestClose honors an as-of bound (no lookahead)", async () => {
     const r = repo();
-    r.insertCloses([
+    await r.insertCloses([
       { ticker: "ACME", date: "2026-07-10", close: 101 },
       { ticker: "ACME", date: "2026-07-12", close: 103 },
     ]);
-    expect(r.latestClose("ACME", "2026-07-11")?.close).toBe(101);
-    expect(r.latestClose("ACME", "2026-07-09")).toBeUndefined();
+    expect((await r.latestClose("ACME", "2026-07-11"))?.close).toBe(101);
+    expect(await r.latestClose("ACME", "2026-07-09")).toBeUndefined();
   });
 
-  it("a batch is atomic: one bad row rolls back the whole batch", () => {
+  it("a batch is atomic: one bad row rolls back the whole batch", async () => {
     const r = repo();
-    expect(() =>
+    await expect(
       r.insertCloses([
         { ticker: "ACME", date: "2026-07-10", close: 100 },
         { ticker: "ACME", date: "2026-07-11", close: -1 },
       ]),
-    ).toThrow();
-    expect(r.getCloses("ACME")).toHaveLength(0);
+    ).rejects.toThrow();
+    expect(await r.getCloses("ACME")).toHaveLength(0);
   });
 
-  it("rejects a malformed as-of read bound instead of silently reading the future", () => {
+  it("rejects a malformed as-of read bound instead of silently reading the future", async () => {
     const r = repo();
-    r.insertCloses([{ ticker: "ACME", date: "2026-12-31", close: 100 }]);
+    await r.insertCloses([{ ticker: "ACME", date: "2026-12-31", close: 100 }]);
     // Lexicographically '2026-12-31' <= '2026-7-1' — unchecked, this bound
     // would return a December close for a July as-of date.
-    expect(() => r.latestClose("ACME", "2026-7-1")).toThrow(RangeError);
-    expect(() => r.lastNCloses("ACME", 5, "2026-7-1")).toThrow(RangeError);
-    expect(() => r.getCloses("ACME", "2026-7-1")).toThrow(RangeError);
-    expect(() => r.latestAnalystSnapshot("ACME", "2026-7-1")).toThrow(
+    await expect(r.latestClose("ACME", "2026-7-1")).rejects.toThrow(RangeError);
+    await expect(r.lastNCloses("ACME", 5, "2026-7-1")).rejects.toThrow(
       RangeError,
     );
-    expect(() => r.latestEarningsSnapshot("ACME", "2026-7-1")).toThrow(
+    await expect(r.getCloses("ACME", "2026-7-1")).rejects.toThrow(RangeError);
+    await expect(r.latestAnalystSnapshot("ACME", "2026-7-1")).rejects.toThrow(
       RangeError,
     );
-    expect(() => r.latestDividendSnapshot("ACME", "2026-7-1")).toThrow(
+    await expect(r.latestEarningsSnapshot("ACME", "2026-7-1")).rejects.toThrow(
+      RangeError,
+    );
+    await expect(r.latestDividendSnapshot("ACME", "2026-7-1")).rejects.toThrow(
       RangeError,
     );
   });
 });
 
 describe("metadata snapshots — append-only, latest = max(as_of)", () => {
-  it("writing the same (ticker, as_of) twice is a no-op that keeps the original", () => {
+  it("writing the same (ticker, as_of) twice is a no-op that keeps the original", async () => {
     const r = repo();
-    r.insertAnalystSnapshot({
+    await r.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       medianTarget: 120,
       numAnalysts: 8,
     });
-    r.insertAnalystSnapshot({
+    await r.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       medianTarget: 999,
       numAnalysts: 1,
     });
-    expect(r.latestAnalystSnapshot("ACME")).toEqual({
+    expect(await r.latestAnalystSnapshot("ACME")).toEqual({
       ticker: "ACME",
       asOf: "2026-07-10",
       medianTarget: 120,
@@ -150,169 +156,171 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
     });
   });
 
-  it("latestAnalystSnapshot returns max(as_of); prior rows stay readable through the as-of bound", () => {
+  it("latestAnalystSnapshot returns max(as_of); prior rows stay readable through the as-of bound", async () => {
     const r = repo();
-    r.insertAnalystSnapshot({
+    await r.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-07-01",
       medianTarget: 110,
       numAnalysts: 7,
     });
-    r.insertAnalystSnapshot({
+    await r.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       medianTarget: 130,
       numAnalysts: 9,
     });
-    expect(r.latestAnalystSnapshot("ACME")?.medianTarget).toBe(130);
+    expect((await r.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(130);
     // The prior observation is still readable: "what did this look like on
     // date X" (CONSTITUTION §3.1-3.2) — the no-lookahead bounded read.
-    expect(r.latestAnalystSnapshot("ACME", "2026-07-05")).toEqual({
+    expect(await r.latestAnalystSnapshot("ACME", "2026-07-05")).toEqual({
       ticker: "ACME",
       asOf: "2026-07-01",
       medianTarget: 110,
       numAnalysts: 7,
     });
-    expect(r.latestAnalystSnapshot("ACME", "2026-06-30")).toBeUndefined();
+    expect(await r.latestAnalystSnapshot("ACME", "2026-06-30")).toBeUndefined();
     // Inserting an older as_of later never displaces the latest.
-    r.insertAnalystSnapshot({
+    await r.insertAnalystSnapshot({
       ticker: "ACME",
       asOf: "2026-06-15",
       medianTarget: 90,
       numAnalysts: 5,
     });
-    expect(r.latestAnalystSnapshot("ACME")?.asOf).toBe("2026-07-10");
-    expect(r.latestAnalystSnapshot("ACME", "2026-06-20")?.medianTarget).toBe(
-      90,
-    );
+    expect((await r.latestAnalystSnapshot("ACME"))?.asOf).toBe("2026-07-10");
+    expect(
+      (await r.latestAnalystSnapshot("ACME", "2026-06-20"))?.medianTarget,
+    ).toBe(90);
   });
 
-  it("earnings and dividend snapshots honor the as-of bound too", () => {
+  it("earnings and dividend snapshots honor the as-of bound too", async () => {
     const r = repo();
-    r.insertEarningsSnapshot({
+    await r.insertEarningsSnapshot({
       ticker: "ACME",
       asOf: "2026-07-01",
       nextEarningsDate: "2026-07-20",
     });
-    r.insertEarningsSnapshot({
+    await r.insertEarningsSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextEarningsDate: "2026-10-20",
     });
     expect(
-      r.latestEarningsSnapshot("ACME", "2026-07-05")?.nextEarningsDate,
+      (await r.latestEarningsSnapshot("ACME", "2026-07-05"))?.nextEarningsDate,
     ).toBe("2026-07-20");
-    r.insertDividendSnapshot({
+    await r.insertDividendSnapshot({
       ticker: "ACME",
       asOf: "2026-07-01",
       nextExDivDate: "2026-07-15",
     });
-    r.insertDividendSnapshot({
+    await r.insertDividendSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextExDivDate: "2026-10-15",
     });
-    expect(r.latestDividendSnapshot("ACME", "2026-07-05")?.nextExDivDate).toBe(
-      "2026-07-15",
-    );
+    expect(
+      (await r.latestDividendSnapshot("ACME", "2026-07-05"))?.nextExDivDate,
+    ).toBe("2026-07-15");
   });
 
-  it("earnings and dividend snapshots behave the same, including null event dates", () => {
+  it("earnings and dividend snapshots behave the same, including null event dates", async () => {
     const r = repo();
-    r.insertEarningsSnapshot({
+    await r.insertEarningsSnapshot({
       ticker: "ACME",
       asOf: "2026-07-01",
       nextEarningsDate: "2026-07-20",
     });
-    r.insertEarningsSnapshot({
+    await r.insertEarningsSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextEarningsDate: null,
     });
-    expect(r.latestEarningsSnapshot("ACME")).toEqual({
+    expect(await r.latestEarningsSnapshot("ACME")).toEqual({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextEarningsDate: null,
     });
 
-    r.insertDividendSnapshot({
+    await r.insertDividendSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextExDivDate: "2026-07-15",
     });
-    r.insertDividendSnapshot({
+    await r.insertDividendSnapshot({
       ticker: "ACME",
       asOf: "2026-07-10",
       nextExDivDate: "2026-08-01",
     });
-    expect(r.latestDividendSnapshot("ACME")?.nextExDivDate).toBe("2026-07-15");
-    expect(r.latestDividendSnapshot("MISSING")).toBeUndefined();
+    expect((await r.latestDividendSnapshot("ACME"))?.nextExDivDate).toBe(
+      "2026-07-15",
+    );
+    expect(await r.latestDividendSnapshot("MISSING")).toBeUndefined();
   });
 
-  it("rejects malformed snapshot observations at the write edge — a bad append-only row would fail downstream forever", () => {
+  it("rejects malformed snapshot observations at the write edge — a bad append-only row would fail downstream forever", async () => {
     const r = repo();
     const analyst = { ticker: "ACME", asOf: "2026-07-10", numAnalysts: 8 };
     // A zero/negative/non-finite target would blow up the implied-upside
     // metric on every future evaluation of every screen.
-    expect(() =>
+    await expect(
       r.insertAnalystSnapshot({ ...analyst, medianTarget: 0 }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertAnalystSnapshot({ ...analyst, medianTarget: -5 }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertAnalystSnapshot({ ...analyst, medianTarget: Number.NaN }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertAnalystSnapshot({
         ticker: "ACME",
         asOf: "2026-07-10",
         medianTarget: 100,
         numAnalysts: 2.5,
       }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertAnalystSnapshot({
         ticker: "ACME",
         asOf: "2026-7-10", // not zero-padded: would sort wrong forever
         medianTarget: 100,
         numAnalysts: 8,
       }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertEarningsSnapshot({
         ticker: "ACME",
         asOf: "2026-07-10",
         nextEarningsDate: "2026-7-20",
       }),
-    ).toThrow(RangeError);
+    ).rejects.toThrow(RangeError);
     // Well-formed but impossible: reading it back through daysToEvent would
     // otherwise crash every screen evaluation, forever (append-only).
-    expect(() =>
+    await expect(
       r.insertEarningsSnapshot({
         ticker: "ACME",
         asOf: "2026-07-10",
         nextEarningsDate: "2026-02-30",
       }),
-    ).toThrow(RangeError);
-    expect(() =>
+    ).rejects.toThrow(RangeError);
+    await expect(
       r.insertDividendSnapshot({
         ticker: "ACME",
         asOf: "2026-7-10",
         nextExDivDate: null,
       }),
-    ).toThrow(RangeError);
-    expect(r.latestAnalystSnapshot("ACME")).toBeUndefined();
+    ).rejects.toThrow(RangeError);
+    expect(await r.latestAnalystSnapshot("ACME")).toBeUndefined();
   });
 });
 
 describe("instruments — lifecycle bookkeeping", () => {
-  it("addInstrument registers as pending; re-adding is a no-op", () => {
+  it("addInstrument registers as pending; re-adding is a no-op", async () => {
     const r = repo();
-    r.addInstrument("ACME", "2026-07-10");
-    r.setInstrumentState("ACME", "ready");
-    r.addInstrument("ACME", "2026-07-12");
-    expect(r.getInstrument("ACME")).toEqual({
+    await r.addInstrument("ACME", "2026-07-10");
+    await r.setInstrumentState("ACME", "ready");
+    await r.addInstrument("ACME", "2026-07-12");
+    expect(await r.getInstrument("ACME")).toEqual({
       ticker: "ACME",
       currency: null,
       state: "ready",
@@ -323,14 +331,14 @@ describe("instruments — lifecycle bookkeeping", () => {
     });
   });
 
-  it("updates state, currency, and sync timestamps", () => {
+  it("updates state, currency, and sync timestamps", async () => {
     const r = repo();
-    r.addInstrument("ACME", "2026-07-10");
-    r.setInstrumentState("ACME", "backfilling");
-    r.setInstrumentCurrency("ACME", "USD");
-    r.recordPriceSync("ACME", "2026-07-11");
-    r.recordMetadataSync("ACME", "2026-07-12");
-    expect(r.getInstrument("ACME")).toEqual({
+    await r.addInstrument("ACME", "2026-07-10");
+    await r.setInstrumentState("ACME", "backfilling");
+    await r.setInstrumentCurrency("ACME", "USD");
+    await r.recordPriceSync("ACME", "2026-07-11");
+    await r.recordMetadataSync("ACME", "2026-07-12");
+    expect(await r.getInstrument("ACME")).toEqual({
       ticker: "ACME",
       currency: "USD",
       state: "backfilling",
@@ -341,41 +349,52 @@ describe("instruments — lifecycle bookkeeping", () => {
     });
   });
 
-  it("rejects an invalid lifecycle state at the schema level", () => {
+  it("rejects an invalid lifecycle state at the schema level", async () => {
     const r = repo();
-    r.addInstrument("ACME", "2026-07-10");
-    expect(() => r.setInstrumentState("ACME", "exploded" as never)).toThrow();
+    await r.addInstrument("ACME", "2026-07-10");
+    await expect(
+      r.setInstrumentState("ACME", "exploded" as never),
+    ).rejects.toThrow();
   });
 
-  it("updating an unknown instrument fails loudly", () => {
+  it("updating an unknown instrument fails loudly", async () => {
     const r = repo();
-    expect(() => r.setInstrumentState("GHOST", "ready")).toThrow(
+    await expect(r.setInstrumentState("GHOST", "ready")).rejects.toThrow(
       /Unknown instrument: GHOST/,
     );
-    expect(() => r.recordPriceSync("GHOST", "2026-07-10")).toThrow(
+    await expect(r.recordPriceSync("GHOST", "2026-07-10")).rejects.toThrow(
       /Unknown instrument/,
     );
   });
 
-  it("tracks the consecutive-failure streak: increment returns the count, success resets", () => {
+  it("tracks the consecutive-failure streak: increment returns the count, success resets", async () => {
     const r = repo();
-    r.addInstrument("ACME", "2026-07-10");
-    expect(r.incrementFailures("ACME")).toBe(1);
-    expect(r.incrementFailures("ACME")).toBe(2);
-    expect(r.getInstrument("ACME")?.consecutiveFailures).toBe(2);
-    r.resetFailures("ACME");
-    expect(r.getInstrument("ACME")?.consecutiveFailures).toBe(0);
-    expect(() => r.incrementFailures("GHOST")).toThrow(/Unknown instrument/);
-    expect(() => r.resetFailures("GHOST")).toThrow(/Unknown instrument/);
+    await r.addInstrument("ACME", "2026-07-10");
+    expect(await r.incrementFailures("ACME")).toBe(1);
+    expect(await r.incrementFailures("ACME")).toBe(2);
+    expect((await r.getInstrument("ACME"))?.consecutiveFailures).toBe(2);
+    await r.resetFailures("ACME");
+    expect((await r.getInstrument("ACME"))?.consecutiveFailures).toBe(0);
+    await expect(r.incrementFailures("GHOST")).rejects.toThrow(
+      /Unknown instrument/,
+    );
+    await expect(r.resetFailures("GHOST")).rejects.toThrow(
+      /Unknown instrument/,
+    );
   });
 
-  it("lists instruments, optionally filtered by state", () => {
+  it("lists instruments, optionally filtered by state", async () => {
     const r = repo();
-    r.addInstrument("AAA", "2026-07-10");
-    r.addInstrument("BBB", "2026-07-10");
-    r.setInstrumentState("BBB", "ready");
-    expect(r.listInstruments().map((i) => i.ticker)).toEqual(["AAA", "BBB"]);
-    expect(r.listInstruments("ready").map((i) => i.ticker)).toEqual(["BBB"]);
-    expect(r.listInstruments("error")).toEqual([]);
+    await r.addInstrument("AAA", "2026-07-10");
+    await r.addInstrument("BBB", "2026-07-10");
+    await r.setInstrumentState("BBB", "ready");
+    expect((await r.listInstruments()).map((i) => i.ticker)).toEqual([
+      "AAA",
+      "BBB",
+    ]);
+    expect((await r.listInstruments("ready")).map((i) => i.ticker)).toEqual([
+      "BBB",
+    ]);
+    expect(await r.listInstruments("error")).toEqual([]);
   });
 });

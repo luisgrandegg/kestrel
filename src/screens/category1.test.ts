@@ -116,34 +116,34 @@ describe("category 1 — volatile + undervalued (MVP.md §6 row 1)", () => {
 });
 
 describe("category 1 — end-to-end through the harness (backlog 015)", () => {
-  const seed = (
+  const seed = async (
     repo: Repository,
     ticker: string,
     prices: readonly number[],
     medianTarget = TARGET,
   ) => {
-    repo.addInstrument(ticker, "2026-01-01");
-    repo.insertCloses(toCloses(ticker, prices));
-    repo.insertAnalystSnapshot({
+    await repo.addInstrument(ticker, "2026-01-01");
+    await repo.insertCloses(toCloses(ticker, prices));
+    await repo.insertAnalystSnapshot({
       ticker,
       asOf: ASOF,
       medianTarget,
       numAnalysts: 8,
     });
-    repo.setInstrumentState(ticker, "ready");
+    await repo.setInstrumentState(ticker, "ready");
   };
 
-  it("returns exactly the right matches: cases straddling the upside threshold and the occurrence count", () => {
+  it("returns exactly the right matches: cases straddling the upside threshold and the occurrence count", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SWING", VOLATILE); // both gates pass: the only match
-    seed(repo, "CALM", STEADY); // BASE passes; fails ONLY the occurrence count
-    seed(repo, "PRICEY", VOLATILE, 118); // volatile enough; fails ONLY the upside gate
+    await seed(repo, "SWING", VOLATILE); // both gates pass: the only match
+    await seed(repo, "CALM", STEADY); // BASE passes; fails ONLY the occurrence count
+    await seed(repo, "PRICEY", VOLATILE, 118); // volatile enough; fails ONLY the upside gate
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -158,16 +158,16 @@ describe("category 1 — end-to-end through the harness (backlog 015)", () => {
   it.each([
     { served: ["analystTargets"] as const, missing: ["closes"] },
     { served: ["closes"] as const, missing: ["analystTargets"] },
-  ])("disables with the missing capability named when only $served is served", ({
+  ])("disables with the missing capability named when only $served is served", async ({
     served,
     missing,
   }) => {
     const repo = new Repository(":memory:");
-    seed(repo, "SWING", VOLATILE);
+    await seed(repo, "SWING", VOLATILE);
     const registry = new ProviderRegistry([providerWith(...served)]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,

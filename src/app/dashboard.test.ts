@@ -13,20 +13,26 @@ const ASOF = "2026-07-31";
  * storage → app → screens → ui seams in one pass.
  */
 describe("buildDashboard — storage to rendered text (backlog 018)", () => {
-  const seedCommon = (repo: Repository, ticker: string): void => {
-    repo.addInstrument(ticker, "2026-01-01");
-    repo.insertAnalystSnapshot({
+  const seedCommon = async (
+    repo: Repository,
+    ticker: string,
+  ): Promise<void> => {
+    await repo.addInstrument(ticker, "2026-01-01");
+    await repo.insertAnalystSnapshot({
       ticker,
       asOf: ASOF,
       medianTarget: 142.5, // vs close 114: exactly 25% upside
       numAnalysts: 8,
     });
-    repo.setInstrumentState(ticker, "ready");
+    await repo.setInstrumentState(ticker, "ready");
   };
 
   /** The pinned §5.2 volatile series: 4 completed ±10% fluctuations. */
-  const seedVolatileCloses = (repo: Repository, ticker: string): void => {
-    repo.insertCloses(
+  const seedVolatileCloses = async (
+    repo: Repository,
+    ticker: string,
+  ): Promise<void> => {
+    await repo.insertCloses(
       [100, 112, 98, 113, 99, 114].map((close, i) => ({
         ticker,
         date: `2026-07-${String(i + 1).padStart(2, "0")}`,
@@ -35,16 +41,16 @@ describe("buildDashboard — storage to rendered text (backlog 018)", () => {
     );
   };
 
-  it("renders all three categories from stored data alone", () => {
+  it("renders all three categories from stored data alone", async () => {
     const repo = new Repository(":memory:");
-    seedCommon(repo, "ACME");
-    seedVolatileCloses(repo, "ACME"); // category 1 match
-    repo.insertEarningsSnapshot({
+    await seedCommon(repo, "ACME");
+    await seedVolatileCloses(repo, "ACME"); // category 1 match
+    await repo.insertEarningsSnapshot({
       ticker: "ACME",
       asOf: ASOF,
       nextEarningsDate: "2026-08-07", // category 2 match, 7 days out
     });
-    repo.insertDividendSnapshot({
+    await repo.insertDividendSnapshot({
       ticker: "ACME",
       asOf: ASOF,
       nextExDivDate: "2026-08-14", // category 3 match, at the boundary
@@ -58,7 +64,7 @@ describe("buildDashboard — storage to rendered text (backlog 018)", () => {
       ),
     ]);
 
-    const text = buildDashboard(repo, registry, resolveConfig(), ASOF);
+    const text = await buildDashboard(repo, registry, resolveConfig(), ASOF);
 
     expect(text).toContain("research candidates as of 2026-07-31");
     // Currency was never reported by a provider: explicit "?", not blank.
@@ -69,28 +75,28 @@ describe("buildDashboard — storage to rendered text (backlog 018)", () => {
     expect(text).toMatch(/ACME[ ]+25\.0%[ ]+14[ ]+2026-08-14[ ]+8/);
   });
 
-  it("renders reported currency natively end-to-end", () => {
+  it("renders reported currency natively end-to-end", async () => {
     const repo = new Repository(":memory:");
-    seedCommon(repo, "ACME");
-    seedVolatileCloses(repo, "ACME");
-    repo.setInstrumentCurrency("ACME", "EUR");
+    await seedCommon(repo, "ACME");
+    await seedVolatileCloses(repo, "ACME");
+    await repo.setInstrumentCurrency("ACME", "EUR");
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
 
-    const text = buildDashboard(repo, registry, resolveConfig(), ASOF);
+    const text = await buildDashboard(repo, registry, resolveConfig(), ASOF);
     expect(text).toMatch(/ACME[ ]+25\.0%[ ]+142\.50 EUR[ ]+114\.00 EUR/);
   });
 
-  it("renders disabled screens with their missing capabilities when the registry cannot serve them", () => {
+  it("renders disabled screens with their missing capabilities when the registry cannot serve them", async () => {
     const repo = new Repository(":memory:");
-    seedCommon(repo, "ACME");
-    seedVolatileCloses(repo, "ACME");
+    await seedCommon(repo, "ACME");
+    await seedVolatileCloses(repo, "ACME");
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
 
-    const text = buildDashboard(repo, registry, resolveConfig(), ASOF);
+    const text = await buildDashboard(repo, registry, resolveConfig(), ASOF);
     expect(text).toMatch(/ACME[ ]+25\.0%/); // category 1 still evaluates
     expect(text).toContain(
       "unavailable — missing capability: earningsCalendar",

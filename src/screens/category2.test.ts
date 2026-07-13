@@ -110,37 +110,37 @@ describe("category 2 — pre-earnings + undervalued (MVP.md §6 row 2)", () => {
 });
 
 describe("category 2 — end-to-end through the harness (backlog 016)", () => {
-  const seed = (
+  const seed = async (
     repo: Repository,
     ticker: string,
     nextEarningsDate: IsoDate | null,
     medianTarget = TARGET,
   ) => {
-    repo.addInstrument(ticker, "2026-01-01");
-    repo.insertCloses([{ ticker, date: ASOF, close: 100 }]);
-    repo.insertAnalystSnapshot({
+    await repo.addInstrument(ticker, "2026-01-01");
+    await repo.insertCloses([{ ticker, date: ASOF, close: 100 }]);
+    await repo.insertAnalystSnapshot({
       ticker,
       asOf: ASOF,
       medianTarget,
       numAnalysts: 8,
     });
-    repo.insertEarningsSnapshot({ ticker, asOf: ASOF, nextEarningsDate });
-    repo.setInstrumentState(ticker, "ready");
+    await repo.insertEarningsSnapshot({ ticker, asOf: ASOF, nextEarningsDate });
+    await repo.setInstrumentState(ticker, "ready");
   };
 
-  it("returns exactly the right matches from stored data", () => {
+  it("returns exactly the right matches from stored data", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SOON", "2026-08-07"); // in window + undervalued: the only match
-    seed(repo, "LATER", "2026-09-30"); // undervalued, event outside window
-    seed(repo, "PAST", "2026-07-01"); // undervalued, event already happened
-    seed(repo, "NODATE", null); // undervalued, no scheduled report
-    seed(repo, "PRICEY", "2026-08-07", 105); // in window, fails only the upside gate
+    await seed(repo, "SOON", "2026-08-07"); // in window + undervalued: the only match
+    await seed(repo, "LATER", "2026-09-30"); // undervalued, event outside window
+    await seed(repo, "PAST", "2026-07-01"); // undervalued, event already happened
+    await seed(repo, "NODATE", null); // undervalued, no scheduled report
+    await seed(repo, "PRICEY", "2026-08-07", 105); // in window, fails only the upside gate
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets", "earningsCalendar"),
     ]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -153,15 +153,15 @@ describe("category 2 — end-to-end through the harness (backlog 016)", () => {
     expect(result?.matches[0]?.nextEarningsDate).toBe("2026-08-07");
   });
 
-  it("disables with the missing capability named when earningsCalendar is unserved", () => {
+  it("disables with the missing capability named when earningsCalendar is unserved", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SOON", "2026-08-07");
+    await seed(repo, "SOON", "2026-08-07");
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,

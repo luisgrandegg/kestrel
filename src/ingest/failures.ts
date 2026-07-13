@@ -1,5 +1,5 @@
 import type { KestrelConfig } from "../config/index.js";
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { InstrumentState } from "../types/index.js";
 import { recordFailure } from "./lifecycle.js";
 import { ProviderCallError } from "./throttle.js";
@@ -13,24 +13,24 @@ import { ProviderCallError } from "./throttle.js";
  * Lives here (not lifecycle.ts, which stays pure) so backfill and daily
  * refresh can never drift on this invariant.
  */
-export function chargeProviderFailure(
-  repo: Repository,
+export async function chargeProviderFailure(
+  repo: StorageRepository,
   config: KestrelConfig,
   state: InstrumentState,
   ticker: string,
   error: unknown,
-): { message: string; errored: boolean } {
+): Promise<{ message: string; errored: boolean }> {
   if (!(error instanceof ProviderCallError)) {
     throw error;
   }
-  const failures = repo.incrementFailures(ticker);
+  const failures = await repo.incrementFailures(ticker);
   const next = recordFailure(
     state,
     failures,
     config.ingestion.maxConsecutiveFailures,
   );
   if (next === "error") {
-    repo.setInstrumentState(ticker, "error");
+    await repo.setInstrumentState(ticker, "error");
   }
   return { message: error.message, errored: next === "error" };
 }

@@ -139,18 +139,20 @@ describe("runBackfill — happy path", () => {
     expect(report.failures).toEqual([]);
     expect(report.skippedErrored).toEqual([]);
 
-    const instrument = deps.repo.getInstrument("ACME");
+    const instrument = await deps.repo.getInstrument("ACME");
     expect(instrument?.state).toBe("ready");
     expect(instrument?.lastPriceSync).toBe(TODAY);
     expect(instrument?.lastMetadataSync).toBe(TODAY);
-    expect(deps.repo.getCloses("ACME").length).toBeGreaterThan(63);
-    expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(120);
-    expect(deps.repo.latestEarningsSnapshot("ACME")?.nextEarningsDate).toBe(
-      "2026-07-20",
+    expect((await deps.repo.getCloses("ACME")).length).toBeGreaterThan(63);
+    expect((await deps.repo.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(
+      120,
     );
-    expect(deps.repo.latestDividendSnapshot("ACME")?.nextExDivDate).toBe(
-      "2026-07-15",
-    );
+    expect(
+      (await deps.repo.latestEarningsSnapshot("ACME"))?.nextEarningsDate,
+    ).toBe("2026-07-20");
+    expect(
+      (await deps.repo.latestDividendSnapshot("ACME"))?.nextExDivDate,
+    ).toBe("2026-07-15");
   });
 
   it("throttles every provider call after the first with interCallDelayMs", async () => {
@@ -184,13 +186,13 @@ describe("runBackfill — happy path", () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
     await runBackfill(deps, ["ACME"]);
-    const closesAfterFirst = deps.repo.getCloses("ACME");
+    const closesAfterFirst = await deps.repo.getCloses("ACME");
     const callsAfterFirst = calls.length;
 
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.processed).toEqual([]);
     expect(calls).toHaveLength(callsAfterFirst);
-    expect(deps.repo.getCloses("ACME")).toEqual(closesAfterFirst);
+    expect(await deps.repo.getCloses("ACME")).toEqual(closesAfterFirst);
   });
 
   it("overlapping re-fetches are idempotent: original values kept, no duplicates", async () => {
@@ -201,13 +203,13 @@ describe("runBackfill — happy path", () => {
     const deps = makeDeps(provider);
 
     await runBackfill(deps, ["ACME"]);
-    const afterFirst = deps.repo.getCloses("ACME");
+    const afterFirst = await deps.repo.getCloses("ACME");
     expect(afterFirst).toHaveLength(40);
-    expect(deps.repo.getInstrument("ACME")?.state).toBe("backfilling");
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("backfilling");
 
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.processed).toEqual(["ACME"]);
-    expect(deps.repo.getCloses("ACME")).toEqual(afterFirst);
+    expect(await deps.repo.getCloses("ACME")).toEqual(afterFirst);
   });
 });
 
@@ -217,14 +219,14 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     const deps = makeDeps(provider);
 
     await runBackfill(deps, ["ACME"]);
-    expect(deps.repo.getInstrument("ACME")?.state).toBe("backfilling");
-    expect(deps.repo.getCloses("ACME")).toHaveLength(40);
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("backfilling");
+    expect(await deps.repo.getCloses("ACME")).toHaveLength(40);
 
     await runBackfill(deps, ["ACME"]);
-    expect(deps.repo.getCloses("ACME")).toHaveLength(80);
-    expect(deps.repo.getInstrument("ACME")?.state).toBe("ready");
+    expect(await deps.repo.getCloses("ACME")).toHaveLength(80);
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("ready");
 
-    const dates = deps.repo.getCloses("ACME").map((c) => c.date);
+    const dates = (await deps.repo.getCloses("ACME")).map((c) => c.date);
     expect(new Set(dates).size).toBe(dates.length);
   });
 
@@ -255,24 +257,26 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     expect(report.failures).toEqual([
       { ticker: "ACME", message: "analyst endpoint down for ACME" },
     ]);
-    const closesAfterCrash = deps.repo.getCloses("ACME");
+    const closesAfterCrash = await deps.repo.getCloses("ACME");
     expect(closesAfterCrash.length).toBeGreaterThan(0);
-    const instrument = deps.repo.getInstrument("ACME");
+    const instrument = await deps.repo.getInstrument("ACME");
     expect(instrument?.lastMetadataSync).toBeNull();
     expect(instrument?.consecutiveFailures).toBe(1);
     expect(instrument?.state).toBe("backfilling");
-    expect(deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();
+    expect(await deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();
 
     // Run 2 with the endpoint recovered: metadata completes, closes are not
     // duplicated, the instrument promotes.
     metadataFailing.delete("ACME");
     await runBackfill(deps, ["ACME"]);
-    expect(deps.repo.getCloses("ACME")).toEqual(closesAfterCrash);
-    const recovered = deps.repo.getInstrument("ACME");
+    expect(await deps.repo.getCloses("ACME")).toEqual(closesAfterCrash);
+    const recovered = await deps.repo.getInstrument("ACME");
     expect(recovered?.lastMetadataSync).toBe(TODAY);
     expect(recovered?.consecutiveFailures).toBe(0);
     expect(recovered?.state).toBe("ready");
-    expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(120);
+    expect((await deps.repo.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(
+      120,
+    );
   });
 
   it("a failure on one instrument does not abort the rest of the run", async () => {
@@ -283,8 +287,8 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     expect(report.failures).toEqual([
       { ticker: "BAD", message: "provider down for BAD" },
     ]);
-    expect(deps.repo.getInstrument("GOOD")?.state).toBe("ready");
-    expect(deps.repo.getInstrument("BAD")?.consecutiveFailures).toBe(1);
+    expect((await deps.repo.getInstrument("GOOD"))?.state).toBe("ready");
+    expect((await deps.repo.getInstrument("BAD"))?.consecutiveFailures).toBe(1);
   });
 });
 
@@ -295,11 +299,11 @@ describe("runBackfill — failure accounting (MVP §7 error rule)", () => {
 
     await runBackfill(deps, ["BAD"]);
     await runBackfill(deps, ["BAD"]);
-    expect(deps.repo.getInstrument("BAD")?.state).toBe("backfilling");
+    expect((await deps.repo.getInstrument("BAD"))?.state).toBe("backfilling");
 
     const report = await runBackfill(deps, ["BAD"]);
     expect(report.errored).toEqual(["BAD"]);
-    expect(deps.repo.getInstrument("BAD")?.state).toBe("error");
+    expect((await deps.repo.getInstrument("BAD"))?.state).toBe("error");
 
     // A further run leaves the error instrument alone — but reports it, so
     // a dead watchlist is never indistinguishable from "nothing to do".
@@ -317,12 +321,16 @@ describe("runBackfill — failure accounting (MVP §7 error rule)", () => {
 
     await runBackfill(deps, ["FLAKY"]);
     await runBackfill(deps, ["FLAKY"]);
-    expect(deps.repo.getInstrument("FLAKY")?.consecutiveFailures).toBe(2);
+    expect((await deps.repo.getInstrument("FLAKY"))?.consecutiveFailures).toBe(
+      2,
+    );
 
     failing.delete("FLAKY");
     await runBackfill(deps, ["FLAKY"]);
-    expect(deps.repo.getInstrument("FLAKY")?.consecutiveFailures).toBe(0);
-    expect(deps.repo.getInstrument("FLAKY")?.state).toBe("ready");
+    expect((await deps.repo.getInstrument("FLAKY"))?.consecutiveFailures).toBe(
+      0,
+    );
+    expect((await deps.repo.getInstrument("FLAKY"))?.state).toBe("ready");
   });
 });
 
@@ -333,8 +341,10 @@ describe("runBackfill — provider data validation (append-only defense)", () =>
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.failures).toHaveLength(1);
     expect(report.failures[0]?.message).toMatch(/"acme" when "ACME"/);
-    expect(deps.repo.getCloses("ACME")).toHaveLength(0);
-    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(1);
+    expect(await deps.repo.getCloses("ACME")).toHaveLength(0);
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      1,
+    );
   });
 
   it("rejects future-dated closes before they can poison the resume cursor", async () => {
@@ -343,7 +353,7 @@ describe("runBackfill — provider data validation (append-only defense)", () =>
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.failures).toHaveLength(1);
     expect(report.failures[0]?.message).toMatch(/future-dated close/);
-    expect(deps.repo.getCloses("ACME")).toHaveLength(0);
+    expect(await deps.repo.getCloses("ACME")).toHaveLength(0);
   });
 });
 
@@ -361,7 +371,9 @@ describe("runBackfill — capability handling", () => {
     const deps = makeDeps(provider);
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.processed).toEqual(["ACME"]);
-    expect(deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();
-    expect(deps.repo.getInstrument("ACME")?.lastMetadataSync).toBe(TODAY);
+    expect(await deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();
+    expect((await deps.repo.getInstrument("ACME"))?.lastMetadataSync).toBe(
+      TODAY,
+    );
   });
 });

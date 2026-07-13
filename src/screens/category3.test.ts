@@ -110,38 +110,38 @@ describe("category 3 — pre-ex-dividend + undervalued (MVP.md §6 row 3)", () =
 });
 
 describe("category 3 — end-to-end through the harness (backlog 017)", () => {
-  const seed = (
+  const seed = async (
     repo: Repository,
     ticker: string,
     nextExDivDate: IsoDate | null,
     medianTarget = TARGET,
   ) => {
-    repo.addInstrument(ticker, "2026-01-01");
-    repo.insertCloses([{ ticker, date: ASOF, close: 100 }]);
-    repo.insertAnalystSnapshot({
+    await repo.addInstrument(ticker, "2026-01-01");
+    await repo.insertCloses([{ ticker, date: ASOF, close: 100 }]);
+    await repo.insertAnalystSnapshot({
       ticker,
       asOf: ASOF,
       medianTarget,
       numAnalysts: 8,
     });
-    repo.insertDividendSnapshot({ ticker, asOf: ASOF, nextExDivDate });
-    repo.setInstrumentState(ticker, "ready");
+    await repo.insertDividendSnapshot({ ticker, asOf: ASOF, nextExDivDate });
+    await repo.setInstrumentState(ticker, "ready");
   };
 
-  it("returns exactly the right matches from stored data, including boundary and past-date exclusions", () => {
+  it("returns exactly the right matches from stored data, including boundary and past-date exclusions", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SOON", "2026-08-07"); // in window + undervalued: match
-    seed(repo, "EDGE", "2026-08-14"); // exactly at windowDays: match
-    seed(repo, "LATER", "2026-08-15"); // one day past the window
-    seed(repo, "PAST", "2026-07-30"); // already went ex-dividend
-    seed(repo, "NODATE", null); // no scheduled ex-div date
-    seed(repo, "PRICEY", "2026-08-07", 105); // fails only the upside gate
+    await seed(repo, "SOON", "2026-08-07"); // in window + undervalued: match
+    await seed(repo, "EDGE", "2026-08-14"); // exactly at windowDays: match
+    await seed(repo, "LATER", "2026-08-15"); // one day past the window
+    await seed(repo, "PAST", "2026-07-30"); // already went ex-dividend
+    await seed(repo, "NODATE", null); // no scheduled ex-div date
+    await seed(repo, "PRICEY", "2026-08-07", 105); // fails only the upside gate
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets", "dividendCalendar"),
     ]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,
@@ -153,15 +153,15 @@ describe("category 3 — end-to-end through the harness (backlog 017)", () => {
     expect(result?.matches.map((m) => m.daysToExDiv)).toEqual([14, 7]);
   });
 
-  it("disables with the missing capability named when dividendCalendar is unserved", () => {
+  it("disables with the missing capability named when dividendCalendar is unserved", async () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SOON", "2026-08-07");
+    await seed(repo, "SOON", "2026-08-07");
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
     const config = resolveConfig();
 
-    const [result] = evaluateScreens(
+    const [result] = await evaluateScreens(
       repo,
       registry,
       config,

@@ -3,6 +3,7 @@ import { type DailyReport, runDaily } from "../ingest/daily.js";
 import { loadWatchlist } from "../ingest/watchlist.js";
 import type { Provider } from "../providers/provider.js";
 import { ProviderRegistry } from "../providers/registry.js";
+import type { StorageRepository } from "../storage/port.js";
 import { Repository } from "../storage/repository.js";
 import type { IsoDate } from "../types/index.js";
 import { buildDashboard } from "./dashboard.js";
@@ -48,7 +49,7 @@ export async function runDailyPipeline(
   const config = loadConfig(options.configPath);
   const watchlist = loadWatchlist(options.watchlistPath);
   const registry = new ProviderRegistry(options.providers ?? activeProviders());
-  const repo = new Repository(options.dbPath);
+  const repo: StorageRepository = new Repository(options.dbPath);
   try {
     let report: DailyReport | null = null;
     if (registry.isServed("closes")) {
@@ -77,10 +78,10 @@ export async function runDailyPipeline(
       );
     }
     return {
-      dashboard: buildDashboard(repo, registry, config, options.today),
+      dashboard: await buildDashboard(repo, registry, config, options.today),
       report,
     };
   } finally {
-    repo.close();
+    await repo.close();
   }
 }
