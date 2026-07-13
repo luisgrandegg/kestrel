@@ -15,9 +15,14 @@ Backfill ~1 year (`backfillLookbackDays`, default 365) of daily closes per instr
 - Initial metadata snapshots (analyst targets, earnings, ex-dividend) fetched as part of bringing an instrument up.
 - Ingestion computes nothing — it fetches and writes (seam rule, `CONSTITUTION.md` §2.2).
 
+## Failure accounting (from item 011's review)
+
+The runner wires the persistent failure streak: `Repository.incrementFailures` on each adapter failure, feeding `recordFailure` for the error transition at `ingestion.maxConsecutiveFailures`; `resetFailures` on any successful fetch. Whether/when `error` instruments are retried is a design point to settle here (sticky-error decision recorded on item 011).
+
 ## Acceptance criteria
 
 - [ ] Idempotency test: running backfill twice produces identical storage (row counts unchanged).
 - [ ] Mid-run-resume test: kill/abort partway, re-run, end state correct with no duplicates.
 - [ ] A capped/slow fake provider backfills across multiple runs without duplication.
 - [ ] Inter-call delay verifiably applied (injectable sleep/clock for tests).
+- [ ] Failure accounting: increment-on-failure / reset-on-success / demote-at-threshold, tested across simulated runs.

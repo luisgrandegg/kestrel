@@ -13,6 +13,7 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 - Persists results per the storage strategy (`MVP.md` §11 suggests committing the SQLite file alongside the repo; keep it behind the storage seam).
 - Weekend/holiday runs are harmless no-ops (dedupe by trading date).
 - Document how to add tickers to the watchlist (README or `docs/`).
+- The entrypoint passes explicit watchlist/config paths (the module defaults are cwd-relative and assume repo-root invocation).
 
 ## Acceptance criteria
 

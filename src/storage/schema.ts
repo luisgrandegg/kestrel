@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS instruments (
   state TEXT NOT NULL CHECK (state IN ('pending', 'backfilling', 'ready', 'error')),
   added_at TEXT NOT NULL,
   last_price_sync TEXT,
-  last_metadata_sync TEXT
+  last_metadata_sync TEXT,
+  consecutive_failures INTEGER NOT NULL DEFAULT 0 CHECK (consecutive_failures >= 0)
 );
 
 CREATE TABLE IF NOT EXISTS prices (

@@ -1,4 +1,4 @@
-import { assertPositiveFinite } from "./guards.js";
+import { assertPositiveFinite } from "../types/guards.js";
 
 /**
  * Completed-fluctuations metric (backlog item 006) — MVP.md §5.2.

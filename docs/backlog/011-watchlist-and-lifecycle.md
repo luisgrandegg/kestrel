@@ -16,9 +16,16 @@ A user-defined watchlist of tickers, and the `pending → backfilling → ready`
   - Partial backfill is a **valid state**, not an error.
 - Removing a ticker from the watchlist stops future syncs but never deletes stored history (append-only).
 
+## Decisions recorded
+
+- **Sticky `error`:** an instrument marked `error` is excluded from syncing and never auto-recovers; recovery is a manual intervention. MVP §7 is silent on recovery — item 012 owns the wiring (increment-on-failure, reset-on-success) and should revisit whether/when `error` instruments get retried, since a multi-day provider outage could otherwise freeze instruments on stale data.
+- **`ingestion.maxConsecutiveFailures` (default 3):** the key is mandated by "threshold explicit, not magic"; the default value 3 is a provisional gap-fill (§7 names no number) pending user sign-off.
+- **Ordering:** items 012/013 must call `registerWatchlist` before `syncableInstruments`; the latter fails loudly on listed-but-unregistered tickers.
+- **Sequencing note:** this item (M4) was taken ahead of item 010 (M3), which is blocked on its two recorded open questions — a deliberate deviation from the README's top-to-bottom order.
+
 ## Acceptance criteria
 
-- [ ] Adding a ticker to the watchlist creates a `pending` instrument; re-adding is a no-op.
-- [ ] A ticker removed from the watchlist is not picked up by ingestion — decide between driving ingestion off watchlist ∩ instruments vs. adding an `archived` instrument state (the latter needs a small migration of the schema's state CHECK).
-- [ ] Transition rules unit-tested, including promotion-once-history-covers-lookback and the error path.
-- [ ] No historical data is deleted on watchlist removal.
+- [x] Adding a ticker to the watchlist creates a `pending` instrument; re-adding is a no-op.
+- [x] A ticker removed from the watchlist is not picked up by ingestion — **decision: ingestion drives off watchlist ∩ instruments** (no `archived` state, no schema migration; the instruments row and all history remain).
+- [x] Transition rules unit-tested, including promotion-once-history-covers-lookback and the error path.
+- [x] No historical data is deleted on watchlist removal.

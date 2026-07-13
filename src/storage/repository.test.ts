@@ -244,6 +244,7 @@ describe("instruments — lifecycle bookkeeping", () => {
       addedAt: "2026-07-10",
       lastPriceSync: null,
       lastMetadataSync: null,
+      consecutiveFailures: 0,
     });
   });
 
@@ -261,6 +262,7 @@ describe("instruments — lifecycle bookkeeping", () => {
       addedAt: "2026-07-10",
       lastPriceSync: "2026-07-11",
       lastMetadataSync: "2026-07-12",
+      consecutiveFailures: 0,
     });
   });
 
@@ -278,6 +280,18 @@ describe("instruments — lifecycle bookkeeping", () => {
     expect(() => r.recordPriceSync("GHOST", "2026-07-10")).toThrow(
       /Unknown instrument/,
     );
+  });
+
+  it("tracks the consecutive-failure streak: increment returns the count, success resets", () => {
+    const r = repo();
+    r.addInstrument("ACME", "2026-07-10");
+    expect(r.incrementFailures("ACME")).toBe(1);
+    expect(r.incrementFailures("ACME")).toBe(2);
+    expect(r.getInstrument("ACME")?.consecutiveFailures).toBe(2);
+    r.resetFailures("ACME");
+    expect(r.getInstrument("ACME")?.consecutiveFailures).toBe(0);
+    expect(() => r.incrementFailures("GHOST")).toThrow(/Unknown instrument/);
+    expect(() => r.resetFailures("GHOST")).toThrow(/Unknown instrument/);
   });
 
   it("lists instruments, optionally filtered by state", () => {

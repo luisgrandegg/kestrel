@@ -1,4 +1,7 @@
-import { assertNonNegativeInteger, assertPositiveFinite } from "./guards.js";
+import {
+  assertNonNegativeInteger,
+  assertPositiveFinite,
+} from "../types/guards.js";
 
 /**
  * Implied-upside metric (backlog item 007) — MVP.md §5.1.

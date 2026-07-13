@@ -25,6 +25,9 @@ describe("defaultConfig", () => {
         backfillLookbackDays: 365,
         metadataTtlDays: 7,
         interCallDelayMs: 1500,
+        // Not in the §9 table; required by §7's "error on repeated adapter
+        // failure" (backlog item 011).
+        maxConsecutiveFailures: 3,
       },
     });
   });
