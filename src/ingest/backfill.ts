@@ -1,13 +1,13 @@
 import type { KestrelConfig } from "../config/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { Repository } from "../storage/repository.js";
-import type { DailyClose, Instrument, IsoDate } from "../types/index.js";
-import { addDays } from "./dates.js";
+import type { Instrument, IsoDate } from "../types/index.js";
 import {
   promoteWhenCovered,
   recordFailure,
   startBackfill,
 } from "./lifecycle.js";
+import { type FetchCloses, syncPrices } from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
 import { makeThrottle, ProviderCallError, type Throttle } from "./throttle.js";
 import {
@@ -146,77 +146,25 @@ export async function runBackfill(
 
 async function backfillOne(
   deps: BackfillDeps,
-  fetchCloses: (
-    ticker: string,
-    from: IsoDate,
-    to: IsoDate,
-  ) => Promise<DailyClose[]>,
+  fetchCloses: FetchCloses,
   throttle: Throttle,
   instrument: Instrument,
 ): Promise<void> {
   const { repo, registry, config, today } = deps;
   const { ticker } = instrument;
 
-  // Resume from the latest stored close; a fresh instrument starts at the
-  // beginning of the backfill window. Bounds are inclusive (Provider
-  // contract), so the resume cursor is the day after the latest close.
-  const latest = repo.latestClose(ticker, today);
-  const from =
-    latest === undefined
-      ? addDays(today, -config.ingestion.backfillLookbackDays)
-      : addDays(latest.date, 1);
-  if (from <= today) {
-    const closes = await throttle(() => fetchCloses(ticker, from, today));
-    validateProviderCloses(ticker, today, closes);
-    repo.insertCloses(closes);
-  }
-  // Attempt marker only — never a coverage watermark (a capped fetch still
-  // stamps today). The incremental cursor is always latestClose.
-  repo.recordPriceSync(ticker, today);
+  await syncPrices(
+    repo,
+    fetchCloses,
+    throttle,
+    ticker,
+    today,
+    config.ingestion.backfillLookbackDays,
+  );
 
   // Initial metadata snapshots on first bring-up only; the TTL refresh
   // cadence is the daily runner's job (item 013).
   if (instrument.lastMetadataSync === null) {
     await fetchMetadataSnapshots(registry, throttle, repo, ticker, today);
-  }
-}
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Validate provider-returned closes at the last edge before append-only
- * storage, where a bad row could never be removed: the ticker must echo the
- * request, dates must be well-formed and never in the future (a future date
- * is a delayed cursor bomb). Benign over-return of older dates is allowed —
- * insert-or-ignore handles it. Violations are provider failures and feed
- * the streak.
- */
-function validateProviderCloses(
-  ticker: string,
-  to: IsoDate,
-  closes: readonly DailyClose[],
-): void {
-  for (const close of closes) {
-    if (close.ticker !== ticker) {
-      throw new ProviderCallError(
-        new RangeError(
-          `provider returned a close for "${close.ticker}" when "${ticker}" was requested`,
-        ),
-      );
-    }
-    if (!ISO_DATE.test(close.date)) {
-      throw new ProviderCallError(
-        new RangeError(
-          `provider returned a malformed close date "${close.date}" for ${ticker}`,
-        ),
-      );
-    }
-    if (close.date > to) {
-      throw new ProviderCallError(
-        new RangeError(
-          `provider returned a future-dated close ${close.date} > ${to} for ${ticker}`,
-        ),
-      );
-    }
   }
 }

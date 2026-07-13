@@ -18,7 +18,7 @@ The steady-state daily run: fetch only what's missing, refresh slow-moving metad
 
 ## Acceptance criteria
 
-- [ ] Test: a ticker current through yesterday fetches only the missing day(s).
-- [ ] Test: metadata untouched inside the TTL, refreshed (as a **new** snapshot row) once elapsed.
-- [ ] Test: running the daily refresh twice on the same day is a no-op.
-- [ ] Completing 011–013 satisfies the M4 Definition of Done.
+- [x] Test: a ticker current through yesterday fetches only the missing day(s).
+- [x] Test: metadata untouched inside the TTL, refreshed (as a **new** snapshot row) once elapsed.
+- [x] Test: running the daily refresh twice on the same day is a no-op.
+- [x] Completing 011–013 satisfies the M4 Definition of Done.
