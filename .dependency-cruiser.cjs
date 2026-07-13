@@ -104,6 +104,7 @@ module.exports = {
     doNotFollow: { path: "node_modules" },
     tsPreCompilationDeps: true,
     tsConfig: { fileName: "tsconfig.json" },
-    exclude: { path: "\\.test\\.ts$" },
+    // Tests and test-only fixture helpers sit outside the seam graph.
+    exclude: { path: "\\.test\\.ts$|^src/test-support/" },
   },
 };

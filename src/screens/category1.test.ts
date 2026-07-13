@@ -1,24 +1,34 @@
 import { describe, expect, it } from "vitest";
 import { evaluateScreens } from "../app/evaluateScreens.js";
 import { resolveConfig } from "../config/index.js";
-import type { Provider } from "../providers/provider.js";
 import { ProviderRegistry } from "../providers/registry.js";
 import { Repository } from "../storage/repository.js";
-import type { Capability, DailyClose, IsoDate } from "../types/index.js";
+import { providerWith } from "../test-support/fakeProvider.js";
+import type { DailyClose, IsoDate } from "../types/index.js";
 import { makeCategory1Screen } from "./category1.js";
 import type { InstrumentSnapshot } from "./screen.js";
 
-const ASOF = "2026-07-10";
+const ASOF = "2026-07-31";
 
 /** The pinned §5.2 fixture: exactly 4 completed ±10% fluctuations. */
 const VOLATILE = [100, 112, 98, 113, 99, 114];
-/** A steady one-direction ramp: 0 completed fluctuations. */
-const MONOTONIC = [100, 113, 128, 145, 164, 186];
+/**
+ * A steady one-direction drift with no ≥10% reversal: 0 completed
+ * fluctuations. Deliberately ends at the SAME close as VOLATILE so the
+ * two fixtures differ only in volatility, never in BASE.
+ */
+const STEADY = [100, 104, 108, 111, 113, 114];
+/**
+ * Both fixtures end at close 114; 142.5/114 = exactly 25% implied upside
+ * (all values dyadic, so the ratio is exact in floating point) — above
+ * the default 20% threshold, below a 40% override.
+ */
+const TARGET = 142.5;
 
 const toCloses = (ticker: string, prices: readonly number[]): DailyClose[] =>
   prices.map((close, i) => ({
     ticker,
-    date: `2026-07-0${i + 1}` as IsoDate,
+    date: `2026-07-${String(i + 1).padStart(2, "0")}` as IsoDate,
     close,
   }));
 
@@ -45,9 +55,6 @@ const snapshot = (
 };
 
 describe("category 1 — volatile + undervalued (MVP.md §6 row 1)", () => {
-  // Both fixtures end at close 114; 142.5/114 = exactly 25% upside.
-  const TARGET = 142.5;
-
   it("matches BASE AND completedFluctuations >= minOccurrences, carrying the §8 row numbers", () => {
     const screen = makeCategory1Screen(resolveConfig());
     expect(screen.requiredCapabilities).toEqual(["closes", "analystTargets"]);
@@ -65,7 +72,9 @@ describe("category 1 — volatile + undervalued (MVP.md §6 row 1)", () => {
 
   it("excludes an instrument passing BASE but with too few completed fluctuations", () => {
     const screen = makeCategory1Screen(resolveConfig());
-    expect(screen.evaluate(snapshot(MONOTONIC, TARGET))).toBeNull();
+    // STEADY passes BASE (25% upside, 8 analysts) and is rejected ONLY by
+    // the fluctuation gate — 0 completed swings.
+    expect(screen.evaluate(snapshot(STEADY, TARGET))).toBeNull();
   });
 
   it("excludes an instrument with enough fluctuations but failing BASE — upside or analyst gate", () => {
@@ -97,46 +106,41 @@ describe("category 1 — volatile + undervalued (MVP.md §6 row 1)", () => {
     );
     expect(widerSwing.evaluate(snapshot(VOLATILE, TARGET))).toBeNull();
   });
+
+  it("counts only the trailing lookbackTradingDays rows of the closes it is handed", () => {
+    // Lookback 2 keeps only [99, 114] of VOLATILE: a single unconfirmed
+    // leg, 0 completed — the screen enforces its own window rather than
+    // trusting the caller's slice.
+    const screen = makeCategory1Screen(
+      resolveConfig({ fluctuation: { lookbackTradingDays: 2 } }),
+    );
+    expect(screen.evaluate(snapshot(VOLATILE, TARGET))).toBeNull();
+  });
 });
 
 describe("category 1 — end-to-end through the harness (backlog 015)", () => {
-  const providerWith = (...capabilities: Capability[]): Provider => ({
-    id: "fake",
-    capabilities: new Set(capabilities),
-    getCloses: () => Promise.resolve([]),
-    getAnalystTargets: () =>
-      Promise.resolve({
-        ticker: "X",
-        asOf: ASOF,
-        medianTarget: 1,
-        numAnalysts: 5,
-      }),
-    getNextEarnings: () =>
-      Promise.resolve({ ticker: "X", asOf: ASOF, nextEarningsDate: null }),
-    getNextExDividend: () =>
-      Promise.resolve({ ticker: "X", asOf: ASOF, nextExDivDate: null }),
-  });
-
   const seed = (
     repo: Repository,
     ticker: string,
     prices: readonly number[],
+    medianTarget = TARGET,
   ) => {
     repo.addInstrument(ticker, "2026-01-01");
     repo.insertCloses(toCloses(ticker, prices));
     repo.insertAnalystSnapshot({
       ticker,
       asOf: ASOF,
-      medianTarget: 142.5,
+      medianTarget,
       numAnalysts: 8,
     });
     repo.setInstrumentState(ticker, "ready");
   };
 
-  it("returns exactly the volatile+undervalued instruments from stored data", () => {
+  it("returns exactly the right matches: cases straddling the upside threshold and the occurrence count", () => {
     const repo = new Repository(":memory:");
-    seed(repo, "SWING", VOLATILE); // qualifies
-    seed(repo, "STEADY", MONOTONIC); // BASE passes, 0 fluctuations
+    seed(repo, "SWING", VOLATILE); // both gates pass: the only match
+    seed(repo, "CALM", STEADY); // BASE passes; fails ONLY the occurrence count
+    seed(repo, "PRICEY", VOLATILE, 118); // volatile enough; fails ONLY the upside gate
     const registry = new ProviderRegistry([
       providerWith("closes", "analystTargets"),
     ]);
@@ -154,10 +158,16 @@ describe("category 1 — end-to-end through the harness (backlog 015)", () => {
     expect(result?.matches[0]?.completedFluctuations).toBe(4);
   });
 
-  it("disables with the missing capability named when analystTargets is unserved", () => {
+  it.each([
+    { served: ["analystTargets"] as const, missing: ["closes"] },
+    { served: ["closes"] as const, missing: ["analystTargets"] },
+  ])("disables with the missing capability named when only $served is served", ({
+    served,
+    missing,
+  }) => {
     const repo = new Repository(":memory:");
     seed(repo, "SWING", VOLATILE);
-    const registry = new ProviderRegistry([providerWith("closes")]);
+    const registry = new ProviderRegistry([providerWith(...served)]);
     const config = resolveConfig();
 
     const [result] = evaluateScreens(
@@ -167,10 +177,7 @@ describe("category 1 — end-to-end through the harness (backlog 015)", () => {
       [makeCategory1Screen(config)],
       ASOF,
     );
-    expect(result?.resolution).toEqual({
-      enabled: false,
-      missing: ["analystTargets"],
-    });
+    expect(result?.resolution).toEqual({ enabled: false, missing });
     expect(result?.matches).toEqual([]);
   });
 });

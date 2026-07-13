@@ -8,10 +8,14 @@ import type { Screen } from "./screen.js";
  *
  *   BASE AND completedFluctuations(θ, lookback) >= minOccurrences
  *
- * The snapshot's `closes` window IS the fluctuation lookback
- * (`fluctuation.lookbackTradingDays` trading-day rows, sized by the
- * harness) — the count runs over stored closes only, as-of date explicit.
- * All thresholds are bound from config at construction (guardrail 5).
+ * The count runs over stored closes only, as-of date explicit. The screen
+ * enforces its own window — the trailing `fluctuation.lookbackTradingDays`
+ * rows of whatever closes it is handed — rather than trusting the caller
+ * to have sized the snapshot correctly. A younger instrument with fewer
+ * stored closes is counted over what exists: those rows ARE the trailing
+ * window's full content, so the count is the true observed count (never a
+ * fabricated one). All thresholds are bound from config at construction
+ * (guardrail 5).
  */
 
 /** Category 1 row numbers (MVP.md §8): the base numbers + the swing count. */
@@ -24,7 +28,7 @@ export function makeCategory1Screen(
 ): Screen<Category1Match> {
   const { minAnalysts } = config;
   const { upsideThreshold } = config.screens.category1;
-  const { swingPct, minOccurrences } = config.fluctuation;
+  const { swingPct, minOccurrences, lookbackTradingDays } = config.fluctuation;
   return {
     id: "category1",
     requiredCapabilities: ["closes", "analystTargets"],
@@ -34,7 +38,9 @@ export function makeCategory1Screen(
         return null;
       }
       const completed = countCompletedFluctuations(
-        snapshot.closes.map((dailyClose) => dailyClose.close),
+        snapshot.closes
+          .slice(-lookbackTradingDays)
+          .map((dailyClose) => dailyClose.close),
         swingPct,
       );
       if (completed < minOccurrences) {
