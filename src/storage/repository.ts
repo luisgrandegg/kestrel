@@ -172,6 +172,13 @@ export class Repository {
           `close must be a positive finite price, got ${close} for ${ticker} @ ${date}`,
         );
       }
+      // Dates order lexicographically everywhere (SQL and cursors): a
+      // non-zero-padded date would silently sort wrong, forever.
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        throw new RangeError(
+          `close date must be YYYY-MM-DD, got "${date}" for ${ticker}`,
+        );
+      }
     }
     const stmt = this.db.prepare(
       "INSERT INTO prices (ticker, date, close) VALUES (?, ?, ?) ON CONFLICT(ticker, date) DO NOTHING",

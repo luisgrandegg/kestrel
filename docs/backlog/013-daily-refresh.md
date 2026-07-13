@@ -9,7 +9,7 @@ The steady-state daily run: fetch only what's missing, refresh slow-moving metad
 ## Scope
 
 - For each `ready` instrument:
-  - **Incremental prices:** fetch only missing recent trading days (from `last_price_sync` / latest stored date forward). Weekends/holidays add nothing (dedupe by date).
+  - **Incremental prices:** fetch only missing recent trading days — the cursor is `latestClose` (max stored date), never `last_price_sync`, which only records that a run happened. Weekends/holidays add nothing (dedupe by date).
   - **Metadata TTL:** refresh analyst/earnings/dividend snapshots only if `metadataTtlDays` (default 7) elapsed since `last_metadata_sync`.
 - Same run continues backfill for any `pending`/`backfilling` instruments (item 012 logic).
 - One throttled run per day; `interCallDelayMs` between calls throughout.

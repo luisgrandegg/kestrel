@@ -6,75 +6,110 @@ import { Repository } from "../storage/repository.js";
 import type { Capability, DailyClose, IsoDate } from "../types/index.js";
 import { type BackfillDeps, runBackfill } from "./backfill.js";
 import { addDays } from "./dates.js";
+import { makeThrottle } from "./throttle.js";
 
 const TODAY: IsoDate = "2026-07-10";
-
-/** Generate consecutive daily closes ending at `end` (calendar days). */
-const series = (ticker: string, end: IsoDate, count: number): DailyClose[] =>
-  Array.from({ length: count }, (_, i) => ({
-    ticker,
-    date: addDays(end, -(count - 1 - i)),
-    close: 100 + i,
-  }));
+const ALL_CAPABILITIES: Capability[] = [
+  "closes",
+  "analystTargets",
+  "earningsCalendar",
+  "dividendCalendar",
+];
 
 interface FakeOptions {
+  /** Capabilities the fake advertises (default: all four). */
+  capabilities?: Capability[];
   /** Cap on closes returned per getCloses call (oldest first). */
   cap?: number;
-  /** Tickers whose price fetch should throw. */
+  /** Tickers whose price fetch should throw (mutable between runs). */
   failing?: Set<string>;
+  /** Tickers whose analyst fetch should throw (mutable between runs). */
+  metadataFailing?: Set<string>;
+  /** Ignore `from`: always return the same fixed 40-day slice of the
+   * window, with close values that differ per call. */
+  fixedSlice?: boolean;
+  /** Return closes echoing a wrong (lowercased) ticker. */
+  wrongTicker?: boolean;
+  /** Include one close dated after the requested `to`. */
+  futureDated?: boolean;
 }
 
-/** Full-capability fake provider serving one year of synthetic closes. */
+/** Fake provider serving synthetic calendar-daily closes. */
 const makeFake = (options: FakeOptions = {}) => {
   const calls: string[] = [];
+  let closesCalls = 0;
+  const capabilities = options.capabilities ?? ALL_CAPABILITIES;
   const provider: Provider = {
     id: "fake",
-    capabilities: new Set<Capability>([
-      "closes",
-      "analystTargets",
-      "earningsCalendar",
-      "dividendCalendar",
-    ]),
-    getCloses: (ticker, from, to) => {
+    capabilities: new Set(capabilities),
+  };
+  if (capabilities.includes("closes")) {
+    provider.getCloses = (ticker, from, to) => {
       calls.push(`closes:${ticker}:${from}:${to}`);
+      closesCalls += 1;
       if (options.failing?.has(ticker)) {
         return Promise.reject(new Error(`provider down for ${ticker}`));
       }
-      // One synthetic close per calendar day in [from, to], oldest first.
+      if (options.fixedSlice === true) {
+        const start = addDays(TODAY, -365);
+        return Promise.resolve(
+          Array.from({ length: 40 }, (_, i) => ({
+            ticker,
+            date: addDays(start, i),
+            close: 100 + closesCalls,
+          })),
+        );
+      }
       const all: DailyClose[] = [];
       for (let d = from; d <= to; d = addDays(d, 1)) {
-        all.push({ ticker, date: d, close: 100 });
+        all.push({
+          ticker: options.wrongTicker === true ? ticker.toLowerCase() : ticker,
+          date: d,
+          close: 100,
+        });
+      }
+      if (options.futureDated === true) {
+        all.push({ ticker, date: addDays(to, 5), close: 100 });
       }
       return Promise.resolve(
         options.cap === undefined ? all : all.slice(0, options.cap),
       );
-    },
-    getAnalystTargets: (ticker) => {
+    };
+  }
+  if (capabilities.includes("analystTargets")) {
+    provider.getAnalystTargets = (ticker) => {
       calls.push(`analyst:${ticker}`);
+      if (options.metadataFailing?.has(ticker)) {
+        return Promise.reject(new Error(`analyst endpoint down for ${ticker}`));
+      }
       return Promise.resolve({
         ticker,
         asOf: TODAY,
         medianTarget: 120,
         numAnalysts: 8,
       });
-    },
-    getNextEarnings: (ticker) => {
+    };
+  }
+  if (capabilities.includes("earningsCalendar")) {
+    provider.getNextEarnings = (ticker) => {
       calls.push(`earnings:${ticker}`);
       return Promise.resolve({
         ticker,
         asOf: TODAY,
         nextEarningsDate: "2026-07-20",
       });
-    },
-    getNextExDividend: (ticker) => {
+    };
+  }
+  if (capabilities.includes("dividendCalendar")) {
+    provider.getNextExDividend = (ticker) => {
       calls.push(`dividend:${ticker}`);
       return Promise.resolve({
         ticker,
         asOf: TODAY,
         nextExDivDate: "2026-07-15",
       });
-    },
-  };
+    };
+  }
   return { provider, calls };
 };
 
@@ -102,12 +137,12 @@ describe("runBackfill — happy path", () => {
     expect(report.processed).toEqual(["ACME"]);
     expect(report.promoted).toEqual(["ACME"]);
     expect(report.failures).toEqual([]);
+    expect(report.skippedErrored).toEqual([]);
 
     const instrument = deps.repo.getInstrument("ACME");
     expect(instrument?.state).toBe("ready");
     expect(instrument?.lastPriceSync).toBe(TODAY);
     expect(instrument?.lastMetadataSync).toBe(TODAY);
-    // 365 calendar days of synthetic closes + today = 366 rows.
     expect(deps.repo.getCloses("ACME").length).toBeGreaterThan(63);
     expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(120);
     expect(deps.repo.latestEarningsSnapshot("ACME")?.nextEarningsDate).toBe(
@@ -130,16 +165,49 @@ describe("runBackfill — happy path", () => {
     );
   });
 
-  it("is idempotent: a second run adds nothing and changes nothing", async () => {
+  it("a shared pre-warmed throttle delays even the first backfill call (013 composition)", async () => {
     const { provider } = makeFake();
+    const deps = makeDeps(provider);
+    const shared = makeThrottle(
+      deps.sleep,
+      deps.config.ingestion.interCallDelayMs,
+    );
+    // Simulate a prior phase's provider call through the same throttle.
+    await shared(() => Promise.resolve());
+    expect(deps.sleeps).toHaveLength(0);
+    await runBackfill({ ...deps, throttle: shared }, ["ACME"]);
+    // 4 backfill calls, each preceded by a sleep because the throttle was warm.
+    expect(deps.sleeps).toHaveLength(4);
+  });
+
+  it("re-running over a ready instrument adds nothing and calls no provider", async () => {
+    const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
     await runBackfill(deps, ["ACME"]);
     const closesAfterFirst = deps.repo.getCloses("ACME");
+    const callsAfterFirst = calls.length;
 
     const report = await runBackfill(deps, ["ACME"]);
-    // Already ready: not a backfill target any more.
     expect(report.processed).toEqual([]);
+    expect(calls).toHaveLength(callsAfterFirst);
     expect(deps.repo.getCloses("ACME")).toEqual(closesAfterFirst);
+  });
+
+  it("overlapping re-fetches are idempotent: original values kept, no duplicates", async () => {
+    // The fake ignores `from` and returns the same 40 dates with DIFFERENT
+    // values per call — two runs while still backfilling must keep run 1's
+    // values (insert-or-ignore, never overwrite).
+    const { provider } = makeFake({ fixedSlice: true });
+    const deps = makeDeps(provider);
+
+    await runBackfill(deps, ["ACME"]);
+    const afterFirst = deps.repo.getCloses("ACME");
+    expect(afterFirst).toHaveLength(40);
+    expect(deps.repo.getInstrument("ACME")?.state).toBe("backfilling");
+
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.processed).toEqual(["ACME"]);
+    expect(deps.repo.getCloses("ACME")).toEqual(afterFirst);
   });
 });
 
@@ -156,7 +224,6 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     expect(deps.repo.getCloses("ACME")).toHaveLength(80);
     expect(deps.repo.getInstrument("ACME")?.state).toBe("ready");
 
-    // No duplicates: every (ticker, date) unique.
     const dates = deps.repo.getCloses("ACME").map((c) => c.date);
     expect(new Set(dates).size).toBe(dates.length);
   });
@@ -178,6 +245,36 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     );
   });
 
+  it("a crash after closes landed but before metadata completed resumes cleanly", async () => {
+    const metadataFailing = new Set(["ACME"]);
+    const { provider } = makeFake({ metadataFailing });
+    const deps = makeDeps(provider);
+
+    // Run 1: closes persist, then the analyst fetch dies mid-instrument.
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.failures).toEqual([
+      { ticker: "ACME", message: "analyst endpoint down for ACME" },
+    ]);
+    const closesAfterCrash = deps.repo.getCloses("ACME");
+    expect(closesAfterCrash.length).toBeGreaterThan(0);
+    const instrument = deps.repo.getInstrument("ACME");
+    expect(instrument?.lastMetadataSync).toBeNull();
+    expect(instrument?.consecutiveFailures).toBe(1);
+    expect(instrument?.state).toBe("backfilling");
+    expect(deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();
+
+    // Run 2 with the endpoint recovered: metadata completes, closes are not
+    // duplicated, the instrument promotes.
+    metadataFailing.delete("ACME");
+    await runBackfill(deps, ["ACME"]);
+    expect(deps.repo.getCloses("ACME")).toEqual(closesAfterCrash);
+    const recovered = deps.repo.getInstrument("ACME");
+    expect(recovered?.lastMetadataSync).toBe(TODAY);
+    expect(recovered?.consecutiveFailures).toBe(0);
+    expect(recovered?.state).toBe("ready");
+    expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(120);
+  });
+
   it("a failure on one instrument does not abort the rest of the run", async () => {
     const { provider } = makeFake({ failing: new Set(["BAD"]) });
     const deps = makeDeps(provider);
@@ -192,7 +289,7 @@ describe("runBackfill — resumability (guardrail 7)", () => {
 });
 
 describe("runBackfill — failure accounting (MVP §7 error rule)", () => {
-  it("marks an instrument error at the persisted threshold across runs, then skips it", async () => {
+  it("marks an instrument error at the persisted threshold across runs, then skips and reports it", async () => {
     const { provider, calls } = makeFake({ failing: new Set(["BAD"]) });
     const deps = makeDeps(provider);
 
@@ -204,10 +301,12 @@ describe("runBackfill — failure accounting (MVP §7 error rule)", () => {
     expect(report.errored).toEqual(["BAD"]);
     expect(deps.repo.getInstrument("BAD")?.state).toBe("error");
 
-    // A further run leaves the error instrument alone.
+    // A further run leaves the error instrument alone — but reports it, so
+    // a dead watchlist is never indistinguishable from "nothing to do".
     const callCount = calls.length;
     const quiet = await runBackfill(deps, ["BAD"]);
     expect(quiet.processed).toEqual([]);
+    expect(quiet.skippedErrored).toEqual(["BAD"]);
     expect(calls).toHaveLength(callCount);
   });
 
@@ -227,39 +326,39 @@ describe("runBackfill — failure accounting (MVP §7 error rule)", () => {
   });
 });
 
+describe("runBackfill — provider data validation (append-only defense)", () => {
+  it("rejects closes echoing the wrong ticker, charging the provider's streak", async () => {
+    const { provider } = makeFake({ wrongTicker: true });
+    const deps = makeDeps(provider);
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.failures).toHaveLength(1);
+    expect(report.failures[0]?.message).toMatch(/"acme" when "ACME"/);
+    expect(deps.repo.getCloses("ACME")).toHaveLength(0);
+    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(1);
+  });
+
+  it("rejects future-dated closes before they can poison the resume cursor", async () => {
+    const { provider } = makeFake({ futureDated: true });
+    const deps = makeDeps(provider);
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.failures).toHaveLength(1);
+    expect(report.failures[0]?.message).toMatch(/future-dated close/);
+    expect(deps.repo.getCloses("ACME")).toHaveLength(0);
+  });
+});
+
 describe("runBackfill — capability handling", () => {
   it("throws loudly when no provider serves closes", async () => {
-    const pricesless: Provider = {
-      id: "meta-only",
-      capabilities: new Set<Capability>(["analystTargets"]),
-      getAnalystTargets: (ticker) =>
-        Promise.resolve({
-          ticker,
-          asOf: TODAY,
-          medianTarget: 1,
-          numAnalysts: 5,
-        }),
-    };
-    const deps = {
-      ...makeDeps(pricesless),
-      registry: new ProviderRegistry([pricesless]),
-    };
+    const { provider } = makeFake({ capabilities: ["analystTargets"] });
+    const deps = makeDeps(provider);
     await expect(runBackfill(deps, ["ACME"])).rejects.toThrow(
       /no active provider serves the "closes" capability/,
     );
   });
 
   it("skips unserved metadata capabilities without failing or fabricating", async () => {
-    const pricesOnly: Provider = {
-      id: "prices-only",
-      capabilities: new Set<Capability>(["closes"]),
-      getCloses: (ticker, from, to) =>
-        Promise.resolve(series(ticker, to, 100).filter((c) => c.date >= from)),
-    };
-    const deps = {
-      ...makeDeps(pricesOnly),
-      registry: new ProviderRegistry([pricesOnly]),
-    };
+    const { provider } = makeFake({ capabilities: ["closes"] });
+    const deps = makeDeps(provider);
     const report = await runBackfill(deps, ["ACME"]);
     expect(report.processed).toEqual(["ACME"]);
     expect(deps.repo.latestAnalystSnapshot("ACME")).toBeUndefined();

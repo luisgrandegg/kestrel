@@ -23,6 +23,12 @@ export interface Provider {
    * matching Repository.getCloses. Adapters must normalize provider quirks
    * (e.g. an exclusive end timestamp) to this contract, or every daily
    * incremental fetch silently runs one trading day stale.
+   *
+   * A partial return (provider cap, pagination limit) must be the OLDEST
+   * contiguous slice of the requested window — never the newest: ingestion
+   * resumes from the latest stored date, so a dropped older span would
+   * become a permanent hole in append-only storage. Adapters paginate
+   * oldest-first.
    */
   getCloses?(ticker: string, from: IsoDate, to: IsoDate): Promise<DailyClose[]>;
   getAnalystTargets?(ticker: string): Promise<AnalystSnapshot>;

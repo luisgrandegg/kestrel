@@ -54,6 +54,12 @@ export interface Instrument {
   currency: string | null;
   state: InstrumentState;
   addedAt: IsoDate;
+  /**
+   * Date of the last price-sync ATTEMPT — not a coverage watermark: it is
+   * stamped even when the fetch was partial or skipped. Never use it as the
+   * incremental cursor (that is always the latest stored close); its
+   * legitimate use is once-per-day run dedupe.
+   */
   lastPriceSync: IsoDate | null;
   lastMetadataSync: IsoDate | null;
   /** Consecutive adapter failures; reset on success (MVP.md §7 error rule). */

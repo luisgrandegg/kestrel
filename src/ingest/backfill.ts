@@ -1,15 +1,20 @@
 import type { KestrelConfig } from "../config/index.js";
-import type { Provider } from "../providers/provider.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { Repository } from "../storage/repository.js";
-import type { Instrument, IsoDate } from "../types/index.js";
+import type { DailyClose, Instrument, IsoDate } from "../types/index.js";
 import { addDays } from "./dates.js";
 import {
   promoteWhenCovered,
   recordFailure,
   startBackfill,
 } from "./lifecycle.js";
-import { registerWatchlist, syncableInstruments } from "./watchlist.js";
+import { fetchMetadataSnapshots } from "./snapshots.js";
+import { makeThrottle, ProviderCallError, type Throttle } from "./throttle.js";
+import {
+  erroredInstruments,
+  registerWatchlist,
+  syncableInstruments,
+} from "./watchlist.js";
 
 /**
  * Backfill runner (backlog item 012) — MVP.md §7 step 2.
@@ -17,19 +22,19 @@ import { registerWatchlist, syncableInstruments } from "./watchlist.js";
  * For each pending/backfilling instrument: fetch the missing slice of the
  * backfill window (a resumed run continues from the latest stored close, so
  * a capped/slow provider accumulates history across runs without
- * duplication), write it through the repository's insert-or-ignore, fetch
- * the initial metadata snapshots on first bring-up, and promote to `ready`
- * once stored history covers the fluctuation lookback.
+ * duplication), validate and write it through the repository's
+ * insert-or-ignore, fetch the initial metadata snapshots on first bring-up,
+ * and promote to `ready` once stored history covers the fluctuation
+ * lookback.
  *
- * Ingestion computes nothing (CONSTITUTION.md §2.2). The run date and the
- * sleeper are injected — nothing here reads the wall clock (guardrail 2).
- * Every provider call is preceded by the configured inter-call delay
- * (slow-but-correct is a feature, guardrail on §3.3).
+ * Ingestion computes nothing (CONSTITUTION.md §2.2). The run date, sleeper,
+ * and (optionally) the throttle are injected — nothing here reads the wall
+ * clock (guardrail 2), and item 013 shares one throttle across its phases.
  *
- * One instrument's failure never aborts the run: the failure streak is
- * persisted, the instrument demotes to `error` at the configured threshold
- * (sticky — decision on backlog 011), and the report names every failure so
- * nothing is silent.
+ * Failure attribution (MVP §7): only provider-call failures — tagged
+ * ProviderCallError, including validation of what the provider returned —
+ * feed the persistent streak that demotes to sticky `error`. Local storage
+ * or logic errors rethrow and abort the run loudly.
  */
 
 export interface BackfillDeps {
@@ -40,6 +45,8 @@ export interface BackfillDeps {
   today: IsoDate;
   /** Injected sleeper so tests observe the throttle without waiting. */
   sleep: (ms: number) => Promise<void>;
+  /** Share one throttle across a whole daily run; defaults to a fresh one. */
+  throttle?: Throttle;
 }
 
 export interface BackfillReport {
@@ -47,10 +54,16 @@ export interface BackfillReport {
   processed: string[];
   /** Instruments promoted to `ready` this run. */
   promoted: string[];
-  /** Per-instrument failures recorded this run — never silent. */
+  /** Per-instrument provider failures recorded this run — never silent. */
   failures: { ticker: string; message: string }[];
   /** Instruments that hit the failure threshold and were marked `error`. */
   errored: string[];
+  /**
+   * Watchlist instruments sitting in sticky `error` state, skipped by this
+   * run. Surfaced so a dead watchlist is never indistinguishable from
+   * "nothing to do" (guardrail 4).
+   */
+  skippedErrored: string[];
 }
 
 export async function runBackfill(
@@ -65,6 +78,10 @@ export async function runBackfill(
       'Cannot backfill: no active provider serves the "closes" capability',
     );
   }
+  const fetchCloses = closesProvider.getCloses.bind(closesProvider);
+  const throttle =
+    deps.throttle ??
+    makeThrottle(deps.sleep, config.ingestion.interCallDelayMs);
 
   registerWatchlist(repo, watchlist, today);
   const targets = syncableInstruments(repo, watchlist).filter(
@@ -76,25 +93,17 @@ export async function runBackfill(
     promoted: [],
     failures: [],
     errored: [],
-  };
-
-  // Throttle: sleep before every provider call except the very first.
-  let anyCallMade = false;
-  const throttled = async <T>(call: () => Promise<T>): Promise<T> => {
-    if (anyCallMade) {
-      await deps.sleep(config.ingestion.interCallDelayMs);
-    }
-    anyCallMade = true;
-    return call();
+    skippedErrored: erroredInstruments(repo, watchlist).map((i) => i.ticker),
   };
 
   for (const instrument of targets) {
     const { ticker } = instrument;
-    if (instrument.state === "pending") {
-      repo.setInstrumentState(ticker, startBackfill(instrument.state));
+    const state = startBackfill(instrument.state);
+    if (state !== instrument.state) {
+      repo.setInstrumentState(ticker, state);
     }
     try {
-      await backfillOne(deps, closesProvider, instrument, throttled);
+      await backfillOne(deps, fetchCloses, throttle, instrument);
       repo.resetFailures(ticker);
       report.processed.push(ticker);
 
@@ -104,22 +113,24 @@ export async function runBackfill(
         today,
       ).length;
       const next = promoteWhenCovered(
-        "backfilling",
+        state,
         covered,
         config.fluctuation.lookbackTradingDays,
       );
-      if (next === "ready") {
-        repo.setInstrumentState(ticker, "ready");
+      if (next !== state) {
+        repo.setInstrumentState(ticker, next);
         report.promoted.push(ticker);
       }
     } catch (error) {
+      if (!(error instanceof ProviderCallError)) {
+        // Local storage/logic failure — not the adapter's fault. Abort
+        // loudly rather than mis-charging the instrument's failure streak.
+        throw error;
+      }
       const failures = repo.incrementFailures(ticker);
-      report.failures.push({
-        ticker,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      report.failures.push({ ticker, message: error.message });
       const next = recordFailure(
-        "backfilling",
+        state,
         failures,
         config.ingestion.maxConsecutiveFailures,
       );
@@ -135,9 +146,13 @@ export async function runBackfill(
 
 async function backfillOne(
   deps: BackfillDeps,
-  closesProvider: Provider,
+  fetchCloses: (
+    ticker: string,
+    from: IsoDate,
+    to: IsoDate,
+  ) => Promise<DailyClose[]>,
+  throttle: Throttle,
   instrument: Instrument,
-  throttled: <T>(call: () => Promise<T>) => Promise<T>,
 ): Promise<void> {
   const { repo, registry, config, today } = deps;
   const { ticker } = instrument;
@@ -150,33 +165,58 @@ async function backfillOne(
     latest === undefined
       ? addDays(today, -config.ingestion.backfillLookbackDays)
       : addDays(latest.date, 1);
-  if (from <= today && closesProvider.getCloses !== undefined) {
-    const fetchCloses = closesProvider.getCloses.bind(closesProvider);
-    const closes = await throttled(() => fetchCloses(ticker, from, today));
+  if (from <= today) {
+    const closes = await throttle(() => fetchCloses(ticker, from, today));
+    validateProviderCloses(ticker, today, closes);
     repo.insertCloses(closes);
   }
+  // Attempt marker only — never a coverage watermark (a capped fetch still
+  // stamps today). The incremental cursor is always latestClose.
   repo.recordPriceSync(ticker, today);
 
   // Initial metadata snapshots on first bring-up only; the TTL refresh
-  // cadence is the daily runner's job (item 013). A capability served by no
-  // provider is skipped — the registry disables the dependent screens, which
-  // is the sanctioned degradation path (guardrail 4), not fabrication.
+  // cadence is the daily runner's job (item 013).
   if (instrument.lastMetadataSync === null) {
-    const analyst = registry.providersFor("analystTargets")[0];
-    if (analyst?.getAnalystTargets !== undefined) {
-      const fetch = analyst.getAnalystTargets.bind(analyst);
-      repo.insertAnalystSnapshot(await throttled(() => fetch(ticker)));
+    await fetchMetadataSnapshots(registry, throttle, repo, ticker, today);
+  }
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Validate provider-returned closes at the last edge before append-only
+ * storage, where a bad row could never be removed: the ticker must echo the
+ * request, dates must be well-formed and never in the future (a future date
+ * is a delayed cursor bomb). Benign over-return of older dates is allowed —
+ * insert-or-ignore handles it. Violations are provider failures and feed
+ * the streak.
+ */
+function validateProviderCloses(
+  ticker: string,
+  to: IsoDate,
+  closes: readonly DailyClose[],
+): void {
+  for (const close of closes) {
+    if (close.ticker !== ticker) {
+      throw new ProviderCallError(
+        new RangeError(
+          `provider returned a close for "${close.ticker}" when "${ticker}" was requested`,
+        ),
+      );
     }
-    const earnings = registry.providersFor("earningsCalendar")[0];
-    if (earnings?.getNextEarnings !== undefined) {
-      const fetch = earnings.getNextEarnings.bind(earnings);
-      repo.insertEarningsSnapshot(await throttled(() => fetch(ticker)));
+    if (!ISO_DATE.test(close.date)) {
+      throw new ProviderCallError(
+        new RangeError(
+          `provider returned a malformed close date "${close.date}" for ${ticker}`,
+        ),
+      );
     }
-    const dividends = registry.providersFor("dividendCalendar")[0];
-    if (dividends?.getNextExDividend !== undefined) {
-      const fetch = dividends.getNextExDividend.bind(dividends);
-      repo.insertDividendSnapshot(await throttled(() => fetch(ticker)));
+    if (close.date > to) {
+      throw new ProviderCallError(
+        new RangeError(
+          `provider returned a future-dated close ${close.date} > ${to} for ${ticker}`,
+        ),
+      );
     }
-    repo.recordMetadataSync(ticker, today);
   }
 }
