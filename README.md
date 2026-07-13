@@ -35,8 +35,8 @@ providers → ingest → storage → metrics → screens → ui
   an active provider renders a visible "unavailable — missing capability: X"
   state. It is never hidden and never fed fabricated or stale data.
 - **No hardcoded judgement.** Every threshold (upside %, swing size, event
-  windows, analyst minimum) comes from config, overridable per screen via
-  `kestrel.config.json`.
+  windows, analyst minimum) comes from config via `kestrel.config.json`;
+  the upside threshold is overridable per screen.
 - **Seams are lint-enforced.** dependency-cruiser rules fail CI if any layer
   reaches around another (e.g. screens importing providers, UI importing
   storage).
@@ -47,15 +47,17 @@ dependency-ordered items in [`docs/backlog/`](docs/backlog/).
 
 ## Status
 
-All milestones through M7 are built and tested: config, shared types, seam
-lint, both metrics (implied upside; completed-fluctuations ZigZag with
-pinned acceptance tests), append-only SQLite storage, provider registry,
-throttled idempotent ingestion with a `pending → backfilling → ready`
-lifecycle, all three screens, the dashboard renderer, and the scheduled
-GitHub Action.
+Every backlog item except the Yahoo adapter (010) is built and tested:
+config, shared types, seam lint, all three metrics (implied upside;
+completed-fluctuations ZigZag with pinned acceptance tests; event
+proximity), append-only SQLite storage, provider registry, throttled
+idempotent ingestion with a `pending → backfilling → ready` lifecycle, all
+three screens, the dashboard renderer, and the scheduled GitHub Action.
+M3 and M7 remain partially open exactly where they depend on that adapter.
 
-**Not yet live:** the Yahoo Finance adapter (backlog item 010) awaits four
-recorded spec decisions, so no real provider is registered yet — scheduled
+**Not yet live:** the Yahoo Finance adapter awaits three open questions
+recorded on backlog item 010 (plus one provisional default pending
+sign-off on item 011), so no real provider is registered yet — scheduled
 runs currently skip ingestion loudly and render every screen in its
 disabled state.
 
@@ -119,6 +121,7 @@ src/
   screens/    the three category predicates + shared base predicate
   ui/         dashboard renderer (pure text)
   app/        composition root: harness, pipeline, CLI entrypoint
+  test-support/  test-only fixtures (outside the seam graph)
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)

@@ -26,4 +26,5 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 - [x] A manually re-triggered run on the same day changes nothing (idempotency observed end-to-end).
 - [x] Watchlist-addition docs exist and match item 011's mechanism.
 - [ ] M7 — and with it the whole-MVP Definition of Done in `CLAUDE.md` — can be checked off.
-  *Blocked on item 010 (awaiting the four recorded spec decisions).*
+  *Blocked on item 010 (awaiting the three open questions recorded there,
+  plus the provisional `maxConsecutiveFailures` sign-off on item 011).*
