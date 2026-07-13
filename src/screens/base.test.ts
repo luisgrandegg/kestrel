@@ -32,6 +32,7 @@ describe("evaluateBase — MVP.md §6 base predicate", () => {
     );
     expect(match).toEqual({
       ticker: "ACME",
+      currency: "USD",
       impliedUpside: 0.3,
       medianTarget: 130,
       latestClose: 100,

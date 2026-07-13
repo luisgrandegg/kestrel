@@ -68,12 +68,28 @@ module.exports = {
       name: "app-is-top",
       comment:
         "src/app/ is the composition root (the one place that may import " +
-        "both screens/ and providers/); nothing else may import it.",
+        "both screens/ and providers/); nothing else may import it — " +
+        "including directories that don't exist yet (pathNot, not an allowlist).",
       severity: "error",
       from: {
-        path: "^src/(metrics|screens|storage|ui|providers|ingest|config|types)/",
+        path: "^src/",
+        pathNot: "^src/app/",
       },
       to: { path: "^src/app/" },
+    },
+    {
+      name: "screens-feed-app-and-ui-only",
+      comment:
+        "Screening sits above storage/metrics and below the composition root " +
+        "and presentation: only app/ and ui/ may consume screens/. Anything " +
+        "else importing a screen (e.g. ingestion pre-filtering by screen " +
+        "predicates) inverts the one-directional flow (CONSTITUTION.md §2.2).",
+      severity: "error",
+      from: {
+        path: "^src/",
+        pathNot: "^src/(app|ui|screens)/",
+      },
+      to: { path: "^src/screens/" },
     },
     {
       name: "no-circular",

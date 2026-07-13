@@ -1,5 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
-import { assertNonNegativeInteger } from "../types/guards.js";
+import {
+  assertIsoDate,
+  assertNonNegativeInteger,
+  assertPositiveFinite,
+} from "../types/guards.js";
 import type {
   AnalystSnapshot,
   DailyClose,
@@ -155,6 +159,20 @@ export class Repository {
     this.mustUpdate(this.db.prepare(sql).run(value, ticker), ticker);
   }
 
+  /**
+   * Validate an optional date bound before it reaches a lexicographic SQL
+   * comparison: a malformed bound (e.g. "2026-7-1") compares greater than
+   * every zero-padded date and would silently read past the intended as-of
+   * date — a no-lookahead violation — instead of erroring.
+   */
+  private dateBound(name: string, bound?: IsoDate): string | null {
+    if (bound === undefined) {
+      return null;
+    }
+    assertIsoDate(name, bound);
+    return bound;
+  }
+
   // ---- prices (append-only observations) ----
 
   /**
@@ -167,18 +185,8 @@ export class Repository {
    */
   insertCloses(closes: readonly DailyClose[]): void {
     for (const { ticker, date, close } of closes) {
-      if (!Number.isFinite(close) || close <= 0) {
-        throw new RangeError(
-          `close must be a positive finite price, got ${close} for ${ticker} @ ${date}`,
-        );
-      }
-      // Dates order lexicographically everywhere (SQL and cursors): a
-      // non-zero-padded date would silently sort wrong, forever.
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-        throw new RangeError(
-          `close date must be YYYY-MM-DD, got "${date}" for ${ticker}`,
-        );
-      }
+      assertPositiveFinite(`close for ${ticker} @ ${date}`, close);
+      assertIsoDate(`close date for ${ticker}`, date);
     }
     const stmt = this.db.prepare(
       "INSERT INTO prices (ticker, date, close) VALUES (?, ?, ?) ON CONFLICT(ticker, date) DO NOTHING",
@@ -219,8 +227,8 @@ export class Repository {
       )
       .all({
         ticker,
-        from: from ?? null,
-        to: to ?? null,
+        from: this.dateBound("from", from),
+        to: this.dateBound("to", to),
       }) as unknown as DailyClose[];
   }
 
@@ -236,7 +244,11 @@ export class Repository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR date <= :asOf)
          ORDER BY date DESC LIMIT :n`,
       )
-      .all({ ticker, asOf: asOf ?? null, n }) as unknown as DailyClose[];
+      .all({
+        ticker,
+        asOf: this.dateBound("asOf", asOf),
+        n,
+      }) as unknown as DailyClose[];
     return rows.reverse();
   }
 
@@ -248,7 +260,9 @@ export class Repository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR date <= :asOf)
          ORDER BY date DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: asOf ?? null }) as unknown as DailyClose | undefined;
+      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
+      | DailyClose
+      | undefined;
   }
 
   // ---- metadata snapshots (append-only observations) ----
@@ -257,7 +271,25 @@ export class Repository {
   // did this look like on date X") and the proof that prior rows stay
   // readable forever.
 
+  /**
+   * Snapshot writes validate their contract here, mirroring insertCloses:
+   * a malformed observation persisted append-only could never be removed,
+   * and would otherwise fail far downstream (e.g. a medianTarget of 0
+   * blowing up the implied-upside metric on every future evaluation).
+   */
   insertAnalystSnapshot(snapshot: AnalystSnapshot): void {
+    assertIsoDate(
+      `analyst snapshot asOf for ${snapshot.ticker}`,
+      snapshot.asOf,
+    );
+    assertPositiveFinite(
+      `medianTarget for ${snapshot.ticker}`,
+      snapshot.medianTarget,
+    );
+    assertNonNegativeInteger(
+      `numAnalysts for ${snapshot.ticker}`,
+      snapshot.numAnalysts,
+    );
     this.db
       .prepare(
         "INSERT INTO analyst_snapshots (ticker, as_of, median_target, num_analysts) VALUES (?, ?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -282,12 +314,22 @@ export class Repository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: asOf ?? null }) as unknown as
+      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
       | AnalystSnapshot
       | undefined;
   }
 
   insertEarningsSnapshot(snapshot: EarningsSnapshot): void {
+    assertIsoDate(
+      `earnings snapshot asOf for ${snapshot.ticker}`,
+      snapshot.asOf,
+    );
+    if (snapshot.nextEarningsDate !== null) {
+      assertIsoDate(
+        `nextEarningsDate for ${snapshot.ticker}`,
+        snapshot.nextEarningsDate,
+      );
+    }
     this.db
       .prepare(
         "INSERT INTO earnings_snapshots (ticker, as_of, next_earnings_date) VALUES (?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -306,12 +348,22 @@ export class Repository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: asOf ?? null }) as unknown as
+      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
       | EarningsSnapshot
       | undefined;
   }
 
   insertDividendSnapshot(snapshot: DividendSnapshot): void {
+    assertIsoDate(
+      `dividend snapshot asOf for ${snapshot.ticker}`,
+      snapshot.asOf,
+    );
+    if (snapshot.nextExDivDate !== null) {
+      assertIsoDate(
+        `nextExDivDate for ${snapshot.ticker}`,
+        snapshot.nextExDivDate,
+      );
+    }
     this.db
       .prepare(
         "INSERT INTO dividend_snapshots (ticker, as_of, next_ex_div_date) VALUES (?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -330,7 +382,7 @@ export class Repository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: asOf ?? null }) as unknown as
+      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
       | DividendSnapshot
       | undefined;
   }

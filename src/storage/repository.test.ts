@@ -106,6 +106,25 @@ describe("prices — append-only, insert-or-ignore", () => {
     ).toThrow();
     expect(r.getCloses("ACME")).toHaveLength(0);
   });
+
+  it("rejects a malformed as-of read bound instead of silently reading the future", () => {
+    const r = repo();
+    r.insertCloses([{ ticker: "ACME", date: "2026-12-31", close: 100 }]);
+    // Lexicographically '2026-12-31' <= '2026-7-1' — unchecked, this bound
+    // would return a December close for a July as-of date.
+    expect(() => r.latestClose("ACME", "2026-7-1")).toThrow(RangeError);
+    expect(() => r.lastNCloses("ACME", 5, "2026-7-1")).toThrow(RangeError);
+    expect(() => r.getCloses("ACME", "2026-7-1")).toThrow(RangeError);
+    expect(() => r.latestAnalystSnapshot("ACME", "2026-7-1")).toThrow(
+      RangeError,
+    );
+    expect(() => r.latestEarningsSnapshot("ACME", "2026-7-1")).toThrow(
+      RangeError,
+    );
+    expect(() => r.latestDividendSnapshot("ACME", "2026-7-1")).toThrow(
+      RangeError,
+    );
+  });
 });
 
 describe("metadata snapshots — append-only, latest = max(as_of)", () => {
@@ -228,6 +247,53 @@ describe("metadata snapshots — append-only, latest = max(as_of)", () => {
     });
     expect(r.latestDividendSnapshot("ACME")?.nextExDivDate).toBe("2026-07-15");
     expect(r.latestDividendSnapshot("MISSING")).toBeUndefined();
+  });
+
+  it("rejects malformed snapshot observations at the write edge — a bad append-only row would fail downstream forever", () => {
+    const r = repo();
+    const analyst = { ticker: "ACME", asOf: "2026-07-10", numAnalysts: 8 };
+    // A zero/negative/non-finite target would blow up the implied-upside
+    // metric on every future evaluation of every screen.
+    expect(() =>
+      r.insertAnalystSnapshot({ ...analyst, medianTarget: 0 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertAnalystSnapshot({ ...analyst, medianTarget: -5 }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertAnalystSnapshot({ ...analyst, medianTarget: Number.NaN }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertAnalystSnapshot({
+        ticker: "ACME",
+        asOf: "2026-07-10",
+        medianTarget: 100,
+        numAnalysts: 2.5,
+      }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertAnalystSnapshot({
+        ticker: "ACME",
+        asOf: "2026-7-10", // not zero-padded: would sort wrong forever
+        medianTarget: 100,
+        numAnalysts: 8,
+      }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertEarningsSnapshot({
+        ticker: "ACME",
+        asOf: "2026-07-10",
+        nextEarningsDate: "2026-7-20",
+      }),
+    ).toThrow(RangeError);
+    expect(() =>
+      r.insertDividendSnapshot({
+        ticker: "ACME",
+        asOf: "2026-7-10",
+        nextExDivDate: null,
+      }),
+    ).toThrow(RangeError);
+    expect(r.latestAnalystSnapshot("ACME")).toBeUndefined();
   });
 });
 
