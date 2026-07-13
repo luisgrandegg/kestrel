@@ -48,6 +48,24 @@ describe("loadWatchlist", () => {
 });
 
 describe("registerWatchlist + syncableInstruments", () => {
+  it("normalizes raw-cased inputs so no duplicate rows or empty intersections arise", () => {
+    const repo = new Repository(":memory:");
+    registerWatchlist(repo, ["aapl"], "2026-07-10");
+    expect(repo.getInstrument("AAPL")).toBeDefined();
+    expect(repo.getInstrument("aapl")).toBeUndefined();
+    expect(syncableInstruments(repo, [" aapl "]).map((i) => i.ticker)).toEqual([
+      "AAPL",
+    ]);
+  });
+
+  it("fails loudly on watchlist tickers that were never registered", () => {
+    const repo = new Repository(":memory:");
+    registerWatchlist(repo, ["AAPL"], "2026-07-10");
+    expect(() => syncableInstruments(repo, ["AAPL", "NVDA"])).toThrow(
+      /not registered as instruments: NVDA — call registerWatchlist first/,
+    );
+  });
+
   it("registers tickers as pending; re-registering is a no-op", () => {
     const repo = new Repository(":memory:");
     registerWatchlist(repo, ["AAPL", "MSFT"], "2026-07-10");

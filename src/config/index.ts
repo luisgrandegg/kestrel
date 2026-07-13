@@ -38,6 +38,8 @@ export interface IngestionConfig {
    * Consecutive adapter failures before an instrument is marked `error`.
    * Required by MVP.md §7 ("error on repeated adapter failure") though §9
    * lists no key for it — added here rather than hardcoded (guardrail 5).
+   * The default of 3 is a provisional gap-fill pending user sign-off
+   * (recorded on backlog item 011).
    */
   maxConsecutiveFailures: number;
 }
@@ -90,6 +92,12 @@ export const defaultConfig: KestrelConfig = deepFreeze({
   },
 });
 
+/**
+ * Resolved against process.cwd(): intended for repo-root invocation. Note
+ * the sharp edge: with the implicit default path, a missing file silently
+ * means "no overrides" — runners started elsewhere should pass explicit
+ * paths (backlog 019).
+ */
 export const DEFAULT_CONFIG_PATH = "kestrel.config.json";
 
 /** Merge overrides over the defaults. Unknown keys and bad values throw. */
@@ -105,6 +113,8 @@ export function resolveConfig(overrides: ConfigOverrides = {}): KestrelConfig {
 
 /**
  * Load config from a JSON override file merged over the defaults.
+ * (The read/parse ladder mirrors loadWatchlist in src/ingest — keep their
+ * error-wrapping styles in sync.)
  *
  * With no argument, the default path is optional: absence means "no
  * overrides". An explicitly passed path must exist — a typo'd path failing

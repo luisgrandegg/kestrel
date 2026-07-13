@@ -56,6 +56,15 @@ module.exports = {
       to: { path: "^src/(ingest|providers)/" },
     },
     {
+      name: "types-are-leaf",
+      comment:
+        "src/types/ is the shared pure leaf every layer may import: it must " +
+        "import nothing itself, so pure layers can never reach I/O through it.",
+      severity: "error",
+      from: { path: "^src/types/" },
+      to: {},
+    },
+    {
       name: "no-circular",
       comment:
         "Seams are one-directional; cycles mean a seam has been breached.",

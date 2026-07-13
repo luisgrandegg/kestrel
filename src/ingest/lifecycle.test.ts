@@ -17,8 +17,10 @@ describe("lifecycle — pending → backfilling → ready (MVP.md §7)", () => {
     expect(promoteWhenCovered("backfilling", 62, 63)).toBe("backfilling");
     expect(promoteWhenCovered("backfilling", 63, 63)).toBe("ready");
     expect(promoteWhenCovered("backfilling", 300, 63)).toBe("ready");
-    // A pending instrument whose history already covers (e.g. re-synced
-    // after a watchlist re-add) promotes directly.
+    // A pending instrument with covering history arises when a crash
+    // persisted prices but not the pending -> backfilling write; resume
+    // promotes directly (MVP §7 step 2 treats pending/backfilling
+    // uniformly; guardrail 7 resume).
     expect(promoteWhenCovered("pending", 63, 63)).toBe("ready");
   });
 

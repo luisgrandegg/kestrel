@@ -11,11 +11,34 @@ import type { Instrument, IsoDate } from "../types/index.js";
  * table. A ticker removed from the file simply stops being synced — its
  * instruments row and all stored history remain untouched (append-only,
  * guardrail 3). No `archived` state, no schema migration.
+ *
+ * Ordering contract: a run calls `registerWatchlist` before
+ * `syncableInstruments`; the latter fails loudly on listed-but-unregistered
+ * tickers rather than silently never syncing them.
  */
 
+/**
+ * Resolved against process.cwd(): intended for repo-root invocation (the
+ * scheduled Action). Other runners pass an explicit path (backlog 019).
+ */
 export const DEFAULT_WATCHLIST_PATH = "watchlist.json";
 
-/** Load and validate the watchlist file: a JSON array of ticker strings. */
+/** Canonical ticker form used everywhere: trimmed, uppercase. */
+export function normalizeTicker(raw: string): string {
+  const ticker = raw.trim().toUpperCase();
+  if (ticker === "") {
+    throw new Error(
+      `Ticker must be a non-empty string, got: ${JSON.stringify(raw)}`,
+    );
+  }
+  return ticker;
+}
+
+/**
+ * Load and validate the watchlist file: a JSON array of ticker strings.
+ * (The read/parse ladder mirrors loadConfig in src/config — keep their
+ * error-wrapping styles in sync.)
+ */
 export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {
   let raw: string;
   try {
@@ -42,7 +65,7 @@ export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {
         `Watchlist entries must be non-empty ticker strings, got: ${JSON.stringify(entry)}`,
       );
     }
-    const ticker = entry.trim().toUpperCase();
+    const ticker = normalizeTicker(entry);
     if (!seen.has(ticker)) {
       seen.add(ticker);
       tickers.push(ticker);
@@ -51,29 +74,43 @@ export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {
   return tickers;
 }
 
-/** Register watchlist tickers as `pending` instruments. Idempotent. */
+/**
+ * Register watchlist tickers as `pending` instruments. Idempotent.
+ * Normalizes its inputs so a raw-cased caller can never create a duplicate
+ * instrument row alongside the canonical one.
+ */
 export function registerWatchlist(
   repo: Repository,
   tickers: readonly string[],
   addedAt: IsoDate,
 ): void {
   for (const ticker of tickers) {
-    repo.addInstrument(ticker, addedAt);
+    repo.addInstrument(normalizeTicker(ticker), addedAt);
   }
 }
 
 /**
  * Instruments the daily run should touch: watchlist ∩ instruments, minus
  * `error` instruments (repeated failures stop consuming throttled calls
- * until someone intervenes). Removed tickers stop syncing; their history
- * stays.
+ * until someone intervenes — sticky-error decision on backlog 011).
+ * Removed tickers stop syncing; their history stays.
+ *
+ * Throws on watchlist tickers with no instruments row: that can only mean
+ * `registerWatchlist` was not called first, and silently skipping them
+ * would mean a newly added ticker never syncs, with no signal anywhere.
  */
 export function syncableInstruments(
   repo: Repository,
   watchlist: readonly string[],
 ): Instrument[] {
-  const active = new Set(watchlist);
-  return repo
-    .listInstruments()
-    .filter((i) => active.has(i.ticker) && i.state !== "error");
+  const active = new Set(watchlist.map(normalizeTicker));
+  const instruments = repo.listInstruments();
+  const known = new Set(instruments.map((i) => i.ticker));
+  const unregistered = [...active].filter((t) => !known.has(t));
+  if (unregistered.length > 0) {
+    throw new Error(
+      `Watchlist tickers not registered as instruments: ${unregistered.join(", ")} — call registerWatchlist first`,
+    );
+  }
+  return instruments.filter((i) => active.has(i.ticker) && i.state !== "error");
 }

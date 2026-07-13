@@ -56,6 +56,8 @@ export interface Instrument {
   addedAt: IsoDate;
   lastPriceSync: IsoDate | null;
   lastMetadataSync: IsoDate | null;
+  /** Consecutive adapter failures; reset on success (MVP.md §7 error rule). */
+  consecutiveFailures: number;
 }
 
 /** One daily closing price observation. */

@@ -1,3 +1,4 @@
+import { assertIntegerAtLeast } from "../types/guards.js";
 import type { InstrumentState } from "../types/index.js";
 
 /**
@@ -24,16 +25,8 @@ export function promoteWhenCovered(
   storedCloseCount: number,
   lookbackTradingDays: number,
 ): InstrumentState {
-  if (!Number.isInteger(storedCloseCount) || storedCloseCount < 0) {
-    throw new RangeError(
-      `storedCloseCount must be a non-negative integer, got: ${storedCloseCount}`,
-    );
-  }
-  if (!Number.isInteger(lookbackTradingDays) || lookbackTradingDays < 2) {
-    throw new RangeError(
-      `lookbackTradingDays must be an integer >= 2, got: ${lookbackTradingDays}`,
-    );
-  }
+  assertIntegerAtLeast("storedCloseCount", storedCloseCount, 0);
+  assertIntegerAtLeast("lookbackTradingDays", lookbackTradingDays, 2);
   if (
     (state === "pending" || state === "backfilling") &&
     storedCloseCount >= lookbackTradingDays
@@ -53,15 +46,7 @@ export function recordFailure(
   consecutiveFailures: number,
   maxConsecutiveFailures: number,
 ): InstrumentState {
-  if (!Number.isInteger(consecutiveFailures) || consecutiveFailures < 1) {
-    throw new RangeError(
-      `consecutiveFailures must be a positive integer (call after a failure), got: ${consecutiveFailures}`,
-    );
-  }
-  if (!Number.isInteger(maxConsecutiveFailures) || maxConsecutiveFailures < 1) {
-    throw new RangeError(
-      `maxConsecutiveFailures must be a positive integer, got: ${maxConsecutiveFailures}`,
-    );
-  }
+  assertIntegerAtLeast("consecutiveFailures", consecutiveFailures, 1);
+  assertIntegerAtLeast("maxConsecutiveFailures", maxConsecutiveFailures, 1);
   return consecutiveFailures >= maxConsecutiveFailures ? "error" : state;
 }

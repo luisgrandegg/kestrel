@@ -1,4 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
+import { assertNonNegativeInteger } from "../types/guards.js";
 import type {
   AnalystSnapshot,
   DailyClose,
@@ -29,7 +30,8 @@ import { SCHEMA } from "./schema.js";
 
 const INSTRUMENT_SELECT = `SELECT ticker, currency, state, added_at AS addedAt,
        last_price_sync AS lastPriceSync,
-       last_metadata_sync AS lastMetadataSync
+       last_metadata_sync AS lastMetadataSync,
+       consecutive_failures AS consecutiveFailures
   FROM instruments`;
 
 export class Repository {
@@ -106,12 +108,51 @@ export class Repository {
     );
   }
 
-  /** Run a single-column instrument UPDATE, failing loudly on unknown tickers. */
-  private updateInstrument(sql: string, value: string, ticker: string): void {
-    const result = this.db.prepare(sql).run(value, ticker);
+  /**
+   * Record one more consecutive adapter failure; returns the new count for
+   * the caller to feed into the lifecycle threshold rule.
+   */
+  incrementFailures(ticker: string): number {
+    const result = this.db
+      .prepare(
+        "UPDATE instruments SET consecutive_failures = consecutive_failures + 1 WHERE ticker = ?",
+      )
+      .run(ticker);
     if (Number(result.changes) === 0) {
       throw new Error(`Unknown instrument: ${ticker}`);
     }
+    const row = this.db
+      .prepare(
+        "SELECT consecutive_failures AS n FROM instruments WHERE ticker = ?",
+      )
+      .get(ticker) as { n: number };
+    return row.n;
+  }
+
+  /** A successful fetch clears the consecutive-failure streak. */
+  resetFailures(ticker: string): void {
+    this.mustUpdate(
+      this.db
+        .prepare(
+          "UPDATE instruments SET consecutive_failures = 0 WHERE ticker = ?",
+        )
+        .run(ticker),
+      ticker,
+    );
+  }
+
+  private mustUpdate(
+    result: { changes: number | bigint },
+    ticker: string,
+  ): void {
+    if (Number(result.changes) === 0) {
+      throw new Error(`Unknown instrument: ${ticker}`);
+    }
+  }
+
+  /** Run a single-column instrument UPDATE, failing loudly on unknown tickers. */
+  private updateInstrument(sql: string, value: string, ticker: string): void {
+    this.mustUpdate(this.db.prepare(sql).run(value, ticker), ticker);
   }
 
   // ---- prices (append-only observations) ----
@@ -181,9 +222,7 @@ export class Repository {
    * history), in chronological order — the trading-days lookback read.
    */
   lastNCloses(ticker: string, n: number, asOf?: IsoDate): DailyClose[] {
-    if (!Number.isInteger(n) || n < 0) {
-      throw new RangeError(`n must be a non-negative integer, got: ${n}`);
-    }
+    assertNonNegativeInteger("n", n);
     const rows = this.db
       .prepare(
         `SELECT ticker, date, close FROM prices
