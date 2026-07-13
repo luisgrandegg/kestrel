@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { type KestrelConfig, resolveConfig } from "../config/index.js";
-import type { Provider } from "../providers/provider.js";
 import { ProviderRegistry } from "../providers/registry.js";
 import { type BaseMatch, evaluateBase } from "../screens/base.js";
 import type { Screen } from "../screens/screen.js";
 import { Repository } from "../storage/repository.js";
-import type { Capability } from "../types/index.js";
+import { providerWith } from "../test-support/fakeProvider.js";
 import {
   buildSnapshots,
   evaluateScreen,
@@ -29,23 +28,6 @@ const makeBaseScreen = (config: KestrelConfig): Screen<BaseMatch> => ({
       config.minAnalysts,
       config.screens.category1.upsideThreshold,
     ),
-});
-
-const providerWith = (...capabilities: Capability[]): Provider => ({
-  id: "fake",
-  capabilities: new Set(capabilities),
-  getCloses: () => Promise.resolve([]),
-  getAnalystTargets: () =>
-    Promise.resolve({
-      ticker: "X",
-      asOf: ASOF,
-      medianTarget: 1,
-      numAnalysts: 5,
-    }),
-  getNextEarnings: () =>
-    Promise.resolve({ ticker: "X", asOf: ASOF, nextEarningsDate: null }),
-  getNextExDividend: () =>
-    Promise.resolve({ ticker: "X", asOf: ASOF, nextExDivDate: null }),
 });
 
 const seed = (

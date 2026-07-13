@@ -16,6 +16,6 @@ Category 1: instruments that are undervalued per analysts **and** have swung sha
 
 ## Acceptance criteria
 
-- [ ] Given fixture storage, returns exactly the right matches (cases straddling both the upside threshold and the occurrence count).
-- [ ] An instrument passing BASE but with too few completed fluctuations is excluded, and vice versa.
-- [ ] Capabilities declared correctly; screen disables when `closes` or `analystTargets` is unserved.
+- [x] Given fixture storage, returns exactly the right matches (cases straddling both the upside threshold and the occurrence count).
+- [x] An instrument passing BASE but with too few completed fluctuations is excluded, and vice versa.
+- [x] Capabilities declared correctly; screen disables when `closes` or `analystTargets` is unserved.
