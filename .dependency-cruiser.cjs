@@ -49,11 +49,16 @@ module.exports = {
     {
       name: "ui-renders-only",
       comment:
-        "Presentation contains no business logic and no fetching: it may not import " +
-        "ingestion or providers (CONSTITUTION.md §2.2).",
+        "Presentation renders what screening produced — nothing else. It may " +
+        "import only screens/ (result shapes) and types/: reading storage, " +
+        "metrics, or config from ui/ would reach around screening and put " +
+        "judgement in presentation (CONSTITUTION.md §2.2); no I/O either.",
       severity: "error",
       from: { path: "^src/ui/" },
-      to: { path: "^src/(ingest|providers)/" },
+      to: {
+        path: "^src/|^(node:)?(fs|fs/promises|http|https|net|child_process)$",
+        pathNot: "^src/(screens|types|ui)/",
+      },
     },
     {
       name: "types-are-leaf",

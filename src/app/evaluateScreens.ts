@@ -30,8 +30,6 @@ import type { Instrument, IsoDate, ScreenEvaluation } from "../types/index.js";
  * wrapper for a homogeneous list.
  */
 
-export type { ScreenEvaluation } from "../types/index.js";
-
 /** Read every ready instrument's evaluation inputs, bounded by asOf. */
 export function buildSnapshots(
   repo: Repository,

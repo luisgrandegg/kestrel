@@ -63,13 +63,15 @@ describe("renderDashboard — MVP.md §8 (backlog 018)", () => {
     expect(text).toContain("Category 1 — volatile + undervalued");
     // Category 1 row: ticker, upside %, median target, latest close,
     // analysts, fluctuation count.
-    expect(text).toMatch(/ACME\s+25\.0%\s+142\.50 USD\s+114\.00 USD\s+8\s+4/);
+    expect(text).toMatch(
+      /ACME[ ]+25\.0%[ ]+142\.50 USD[ ]+114\.00 USD[ ]+8[ ]+4/,
+    );
     // Category 2 row: ticker, upside %, days to earnings, date, analysts.
     expect(text).toContain("Category 2 — pre-earnings + undervalued");
-    expect(text).toMatch(/BOLT\s+30\.0%\s+7\s+2026-08-07\s+6/);
+    expect(text).toMatch(/BOLT[ ]+30\.0%[ ]+7[ ]+2026-08-07[ ]+6/);
     // Category 3 row: ticker, upside %, days to ex-div, date, analysts.
     expect(text).toContain("Category 3 — pre-ex-dividend + undervalued");
-    expect(text).toMatch(/CARGO\s+21\.0%\s+14\s+2026-08-14\s+5/);
+    expect(text).toMatch(/CARGO[ ]+21\.0%[ ]+14[ ]+2026-08-14[ ]+5/);
   });
 
   it("renders a disabled screen as unavailable with the missing capabilities named", () => {
@@ -103,9 +105,9 @@ describe("renderDashboard — MVP.md §8 (backlog 018)", () => {
         ]),
       }),
     );
-    expect(text).toMatch(/ACME\s+.*142\.50 USD/);
-    expect(text).toMatch(/UMLAUT\s+.*142\.50 EUR/);
-    expect(text).toMatch(/MYSTERY\s+.*142\.50 \?/);
+    expect(text).toMatch(/ACME[ ]+.*142\.50 USD/);
+    expect(text).toMatch(/UMLAUT[ ]+.*142\.50 EUR/);
+    expect(text).toMatch(/MYSTERY[ ]+.*142\.50 \?/);
   });
 
   it("renders an empty enabled screen as 'no matches', distinct from disabled", () => {
