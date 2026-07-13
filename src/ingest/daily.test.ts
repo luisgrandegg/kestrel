@@ -13,6 +13,8 @@ const TODAY: IsoDate = "2026-07-10";
 interface FakeOptions {
   /** Tickers whose price fetch should throw (mutable between runs). */
   failing?: Set<string>;
+  /** Tickers whose analyst fetch should throw. */
+  metadataFailing?: Set<string>;
   /** Return an empty array from getCloses (weekend/holiday window). */
   emptyCloses?: boolean;
 }
@@ -44,6 +46,9 @@ const makeFake = (options: FakeOptions = {}) => {
     },
     getAnalystTargets: (ticker) => {
       calls.push(`analyst:${ticker}`);
+      if (options.metadataFailing?.has(ticker)) {
+        return Promise.reject(new Error(`analyst endpoint down for ${ticker}`));
+      }
       target += 1;
       return Promise.resolve({
         ticker,
@@ -126,10 +131,13 @@ describe("runDaily — incremental refresh (MVP §7 step 1)", () => {
     expect(deps.repo.getInstrument("ACME")?.lastPriceSync).toBe(TODAY);
   });
 
-  it("a same-day second run makes no provider calls (dedupe by date)", async () => {
+  it("a same-day second run makes no provider calls (dedupe by lastPriceSync)", async () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", TODAY, TODAY);
+    // Prices only current through yesterday (e.g. weekend: today's close
+    // does not exist), but a successful run already stamped today.
+    seedReady(deps.repo, "ACME", addDays(TODAY, -1), TODAY);
+    deps.repo.recordPriceSync("ACME", TODAY);
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.refreshed).toEqual(["ACME"]);
@@ -219,6 +227,53 @@ describe("runDaily — failure accounting on ready instruments", () => {
     const quiet = await runDaily(deps, ["ACME"]);
     expect(quiet.refreshed).toEqual([]);
     expect(quiet.skippedErrored).toEqual(["ACME"]);
+  });
+
+  it("a demotion run reports the ticker in errored, not skippedErrored", async () => {
+    const failing = new Set(["ACME"]);
+    const { provider } = makeFake({ failing });
+    const deps = makeDeps(provider);
+    seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
+
+    await runDaily(deps, ["ACME"]);
+    await runDaily(deps, ["ACME"]);
+    const demotionRun = await runDaily(deps, ["ACME"]);
+    expect(demotionRun.errored).toEqual(["ACME"]);
+    expect(demotionRun.skippedErrored).toEqual([]);
+  });
+
+  it("a metadata failure still reports prices as refreshed, and repeated ones demote", async () => {
+    const metadataFailing = new Set(["ACME"]);
+    const { provider } = makeFake({ metadataFailing });
+    const deps = makeDeps(provider);
+    const syncedLongAgo = addDays(
+      TODAY,
+      -deps.config.ingestion.metadataTtlDays,
+    );
+    seedReady(deps.repo, "ACME", addDays(TODAY, -3), syncedLongAgo);
+
+    const report = await runDaily(deps, ["ACME"]);
+    // Prices WERE stored: the report must say so, alongside the failure.
+    expect(report.refreshed).toEqual(["ACME"]);
+    expect(report.failures).toEqual([
+      { ticker: "ACME", message: "analyst endpoint down for ACME" },
+    ]);
+    expect(deps.repo.latestClose("ACME")?.date).toBe(TODAY);
+    // The streak accumulates (no reset-after-prices), so a permanently
+    // broken metadata endpoint eventually demotes per MVP §7.
+    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(1);
+  });
+
+  it("fails loudly when a ready instrument has no stored history (invariant)", async () => {
+    const { provider, calls } = makeFake();
+    const deps = makeDeps(provider);
+    deps.repo.addInstrument("GHOST", "2026-01-01");
+    deps.repo.setInstrumentState("GHOST", "ready");
+
+    await expect(runDaily(deps, ["GHOST"])).rejects.toThrow(
+      /Invariant violated: ready instrument GHOST has no stored close/,
+    );
+    expect(calls).toEqual([]);
   });
 
   it("a successful refresh resets the streak", async () => {

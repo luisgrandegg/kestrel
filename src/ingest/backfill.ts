@@ -2,14 +2,11 @@ import type { KestrelConfig } from "../config/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { Repository } from "../storage/repository.js";
 import type { Instrument, IsoDate } from "../types/index.js";
-import {
-  promoteWhenCovered,
-  recordFailure,
-  startBackfill,
-} from "./lifecycle.js";
+import { chargeProviderFailure } from "./failures.js";
+import { promoteWhenCovered, startBackfill } from "./lifecycle.js";
 import { type FetchCloses, syncPrices } from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
-import { makeThrottle, ProviderCallError, type Throttle } from "./throttle.js";
+import { makeThrottle, type Throttle } from "./throttle.js";
 import {
   erroredInstruments,
   registerWatchlist,
@@ -122,20 +119,9 @@ export async function runBackfill(
         report.promoted.push(ticker);
       }
     } catch (error) {
-      if (!(error instanceof ProviderCallError)) {
-        // Local storage/logic failure — not the adapter's fault. Abort
-        // loudly rather than mis-charging the instrument's failure streak.
-        throw error;
-      }
-      const failures = repo.incrementFailures(ticker);
-      report.failures.push({ ticker, message: error.message });
-      const next = recordFailure(
-        state,
-        failures,
-        config.ingestion.maxConsecutiveFailures,
-      );
-      if (next === "error") {
-        repo.setInstrumentState(ticker, "error");
+      const charged = chargeProviderFailure(repo, config, state, ticker, error);
+      report.failures.push({ ticker, message: charged.message });
+      if (charged.errored) {
         report.errored.push(ticker);
       }
     }

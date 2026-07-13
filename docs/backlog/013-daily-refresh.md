@@ -16,6 +16,8 @@ The steady-state daily run: fetch only what's missing, refresh slow-moving metad
 - Update `last_price_sync` / `last_metadata_sync` on the instrument row.
 - Clock injected — nothing reads `Date.now()` directly (guardrail 2).
 
+**Sequencing note:** completed against fake providers while transitive dependency 010 (M3) remains blocked on its recorded open questions — the same deliberate deviation from the README's top-to-bottom order recorded on items 011 and 012. The M4 DoD tick reflects M4's own test criteria, not M3 completion.
+
 ## Acceptance criteria
 
 - [x] Test: a ticker current through yesterday fetches only the missing day(s).

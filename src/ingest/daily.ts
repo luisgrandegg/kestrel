@@ -5,11 +5,15 @@ import {
   runBackfill,
 } from "./backfill.js";
 import { addDays } from "./dates.js";
-import { recordFailure } from "./lifecycle.js";
+import { chargeProviderFailure } from "./failures.js";
 import { syncPrices } from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
-import { makeThrottle, ProviderCallError } from "./throttle.js";
-import { registerWatchlist, syncableInstruments } from "./watchlist.js";
+import { makeThrottle } from "./throttle.js";
+import {
+  erroredInstruments,
+  registerWatchlist,
+  syncableInstruments,
+} from "./watchlist.js";
 
 /**
  * Daily run (backlog item 013) — MVP.md §7, both steps in ONE throttled run:
@@ -39,7 +43,9 @@ export interface DailyReport {
   failures: { ticker: string; message: string }[];
   /** Instruments demoted to `error` during the refresh phase. */
   errored: string[];
-  /** Sticky-error watchlist instruments skipped by this run. */
+  /** Watchlist instruments already in sticky `error` state when the run
+   * started (never attempted; instruments demoted THIS run are in
+   * `errored`, not here). */
   skippedErrored: string[];
   /** Phase 2: the embedded backfill run over pending/backfilling. */
   backfill: BackfillReport;
@@ -66,6 +72,11 @@ export async function runDaily(
   const ready = syncableInstruments(repo, watchlist).filter(
     (i) => i.state === "ready",
   );
+  // Snapshot BEFORE the refresh loop: instruments demoted this run belong
+  // in `errored`, not in `skippedErrored`.
+  const skippedErrored = erroredInstruments(repo, watchlist).map(
+    (i) => i.ticker,
+  );
 
   const report: Omit<DailyReport, "backfill" | "skippedErrored"> = {
     refreshed: [],
@@ -76,15 +87,31 @@ export async function runDaily(
 
   for (const instrument of ready) {
     const { ticker } = instrument;
-    try {
-      await syncPrices(
-        repo,
-        fetchCloses,
-        throttle,
-        ticker,
-        today,
-        config.ingestion.backfillLookbackDays,
+    // A ready instrument always has stored history (promotion required
+    // coverage). Its absence means a back-dated run date or tampered
+    // storage — fail loud instead of silently re-fetching a year.
+    if (repo.latestClose(ticker, today) === undefined) {
+      throw new Error(
+        `Invariant violated: ready instrument ${ticker} has no stored close on or before ${today} — refusing to silently re-backfill; check the injected run date`,
       );
+    }
+    try {
+      // Once-per-day run dedupe: a successful sync already stamped today.
+      // (The stamp only lands on success, so failure retries are never
+      // blocked; a close published later today arrives on tomorrow's run.)
+      if (instrument.lastPriceSync !== today) {
+        await syncPrices(
+          repo,
+          fetchCloses,
+          throttle,
+          ticker,
+          today,
+          config.ingestion.backfillLookbackDays,
+        );
+      }
+      // Prices are stored at this point: report it even if metadata below
+      // fails — the report must not claim prices were not updated.
+      report.refreshed.push(ticker);
       if (
         metadataDue(
           instrument.lastMetadataSync,
@@ -95,21 +122,20 @@ export async function runDaily(
         await fetchMetadataSnapshots(registry, throttle, repo, ticker, today);
         report.metadataRefreshed.push(ticker);
       }
+      // Reset only when the WHOLE body succeeded: resetting after prices
+      // alone would pin the streak at 1 and a broken metadata endpoint
+      // could never demote (MVP §7 "repeated adapter failure").
       repo.resetFailures(ticker);
-      report.refreshed.push(ticker);
     } catch (error) {
-      if (!(error instanceof ProviderCallError)) {
-        throw error;
-      }
-      const failures = repo.incrementFailures(ticker);
-      report.failures.push({ ticker, message: error.message });
-      const next = recordFailure(
+      const charged = chargeProviderFailure(
+        repo,
+        config,
         instrument.state,
-        failures,
-        config.ingestion.maxConsecutiveFailures,
+        ticker,
+        error,
       );
-      if (next === "error") {
-        repo.setInstrumentState(ticker, "error");
+      report.failures.push({ ticker, message: charged.message });
+      if (charged.errored) {
         report.errored.push(ticker);
       }
     }
@@ -119,7 +145,7 @@ export async function runDaily(
   // between phases also respects interCallDelayMs.
   const backfill = await runBackfill({ ...deps, throttle }, watchlist);
 
-  return { ...report, skippedErrored: backfill.skippedErrored, backfill };
+  return { ...report, skippedErrored, backfill };
 }
 
 /** Metadata is due when never fetched or the TTL has elapsed. */

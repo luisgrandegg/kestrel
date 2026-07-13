@@ -14,6 +14,7 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 - Weekend/holiday runs are harmless no-ops (dedupe by trading date).
 - Document how to add tickers to the watchlist (README or `docs/`).
 - The entrypoint passes explicit watchlist/config paths (the module defaults are cwd-relative and assume repo-root invocation).
+- The entrypoint derives `today` as the **UTC calendar date** from the real clock — the only sanctioned wall-clock read in the codebase (everything under `src/ingest` takes an injected `IsoDate`) — and injects it into `runDaily`; tests pin the UTC conversion.
 
 ## Acceptance criteria
 
