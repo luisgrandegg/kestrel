@@ -26,7 +26,7 @@ Before writing any code, read both documents in full.
 These are the constitution's invariants stated as operational rules. Treat a violation as a build failure.
 
 1. **Seam boundaries are import boundaries.**
-   - `metrics/` and `screens/` import from `storage/` only. They must **never** import from `providers/`.
+   - `metrics/` and `screens/` import only from the pure inner layers (`storage/`, `metrics/`, `config/`, `types/`) — screens evaluate predicates *over metrics* (`constitution.md` §2.2). They must **never** import from `providers/`.
    - Only files in `providers/<name>/` may reference the underlying library (`yahoo-finance2`) or any Yahoo field name, endpoint, or quirk. If a Yahoo-specific string appears anywhere else, it's a bug.
    - Add a dependency-boundary lint rule (e.g. `eslint-plugin-import` / `dependency-cruiser`) that fails CI if these are crossed. Wire it in Milestone 0.
 

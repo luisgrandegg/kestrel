@@ -21,7 +21,7 @@ The declarative screen shape all three categories share: a predicate over metric
 
 ## Acceptance criteria
 
-- [ ] Base predicate unit-tested over fixtures, thresholds from config.
-- [ ] Per-screen `upsideThreshold` override proven in a test (e.g. 40% vs default 20%).
-- [ ] Disabled-screen path works end-to-end with the registry: unmet capability → screen skipped **with the missing capability reported**, no fabricated results.
-- [ ] No I/O and no provider imports in `screens/`.
+- [x] Base predicate unit-tested over fixtures, thresholds from config.
+- [x] Per-screen `upsideThreshold` override proven in a test (e.g. 40% vs default 20%).
+- [x] Disabled-screen path works end-to-end with the registry: unmet capability → screen skipped **with the missing capability reported**, no fabricated results.
+- [x] No I/O and no provider imports in `screens/`.
