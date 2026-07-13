@@ -11,8 +11,9 @@ import type {
 /**
  * Storage seam contract (MVP.md §11; CONSTITUTION.md §3.1–3.2).
  *
- * Everything outside src/storage/ depends on this interface, never on a
- * concrete driver. The contract every implementation must honor:
+ * Consumers type against this interface, never a concrete driver; only
+ * the composition root (src/app/) constructs one (lint-enforced by the
+ * port-not-driver rule). The contract every implementation must honor:
  *
  * - **Append-only observation writes**: prices and metadata snapshots are
  *   insert-or-ignore — writing the same (ticker, date) / (ticker, as_of)
@@ -23,8 +24,8 @@ import type {
  *   read (CONSTITUTION.md §3.2) — never an overwrite.
  *
  * All methods are async so implementations may be backed by out-of-process
- * stores. Implementations: SQLite (`Repository` in this repo, see
- * ./repository.ts); Postgres/Supabase (planned).
+ * stores. Implementations: SQLite (`Repository`, ./repository.ts — tests
+ * and local runs); Supabase Postgres (planned per ADR-0011).
  */
 export interface StorageRepository {
   close(): Promise<void>;

@@ -23,3 +23,4 @@ This folder records **why** Kestrel is built the way it is: one record per signi
 | [0008](0008-yahoo-reference-provider.md) | Yahoo (`yahoo-finance2`) as the MVP reference provider | Accepted | 2026-07-12 |
 | [0009](0009-throttled-daily-ingestion.md) | Throttled daily batch ingestion with ~1-year backfill | Accepted | 2026-07-12 |
 | [0010](0010-project-name-kestrel.md) | Project name: Kestrel | Accepted | 2026-07-12 |
+| [0011](0011-vercel-supabase-deployment.md) | Deploy target: Vercel + Supabase, monorepo with in-app ingest worker | Accepted | 2026-07-13 |
