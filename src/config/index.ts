@@ -34,6 +34,12 @@ export interface IngestionConfig {
   backfillLookbackDays: number;
   metadataTtlDays: number;
   interCallDelayMs: number;
+  /**
+   * Consecutive adapter failures before an instrument is marked `error`.
+   * Required by MVP.md §7 ("error on repeated adapter failure") though §9
+   * lists no key for it — added here rather than hardcoded (guardrail 5).
+   */
+  maxConsecutiveFailures: number;
 }
 
 export interface KestrelConfig {
@@ -80,6 +86,7 @@ export const defaultConfig: KestrelConfig = deepFreeze({
     backfillLookbackDays: 365,
     metadataTtlDays: 7,
     interCallDelayMs: 1500,
+    maxConsecutiveFailures: 3,
   },
 });
 
@@ -199,6 +206,17 @@ function validateConfig(config: KestrelConfig): void {
   ) {
     throw new Error(
       `Config key "fluctuation.lookbackTradingDays" must be an integer >= 2, got: ${JSON.stringify(lookback)}`,
+    );
+  }
+  // 0 would mark instruments error before any failure is tolerated.
+  const maxFailures = config.ingestion.maxConsecutiveFailures;
+  if (
+    typeof maxFailures !== "number" ||
+    !Number.isInteger(maxFailures) ||
+    maxFailures < 1
+  ) {
+    throw new Error(
+      `Config key "ingestion.maxConsecutiveFailures" must be a positive integer, got: ${JSON.stringify(maxFailures)}`,
     );
   }
   // θ is a ratio: 0.10 means 10%. θ >= 1 can never be confirmed by positive

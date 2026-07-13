@@ -18,7 +18,7 @@ A user-defined watchlist of tickers, and the `pending → backfilling → ready`
 
 ## Acceptance criteria
 
-- [ ] Adding a ticker to the watchlist creates a `pending` instrument; re-adding is a no-op.
-- [ ] A ticker removed from the watchlist is not picked up by ingestion — decide between driving ingestion off watchlist ∩ instruments vs. adding an `archived` instrument state (the latter needs a small migration of the schema's state CHECK).
-- [ ] Transition rules unit-tested, including promotion-once-history-covers-lookback and the error path.
-- [ ] No historical data is deleted on watchlist removal.
+- [x] Adding a ticker to the watchlist creates a `pending` instrument; re-adding is a no-op.
+- [x] A ticker removed from the watchlist is not picked up by ingestion — **decision: ingestion drives off watchlist ∩ instruments** (no `archived` state, no schema migration; the instruments row and all history remain).
+- [x] Transition rules unit-tested, including promotion-once-history-covers-lookback and the error path.
+- [x] No historical data is deleted on watchlist removal.
