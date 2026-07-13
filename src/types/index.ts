@@ -34,6 +34,19 @@ export type ScreenResolution =
   | { readonly enabled: true }
   | { readonly enabled: false; readonly missing: readonly Capability[] };
 
+/**
+ * One screen's evaluation result: its registry resolution and (when
+ * enabled) the matches with their supporting numbers. Lives here so the
+ * UI can type against it without importing the composition root (the
+ * boundary lint pins src/app/ as the top of the graph).
+ */
+export interface ScreenEvaluation<Match> {
+  screenId: string;
+  resolution: ScreenResolution;
+  /** Matches with their supporting numbers; empty when disabled. */
+  matches: Match[];
+}
+
 /** Instrument ingestion lifecycle (MVP.md §7). */
 export type InstrumentState = "pending" | "backfilling" | "ready" | "error";
 
