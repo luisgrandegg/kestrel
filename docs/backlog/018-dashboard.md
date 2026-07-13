@@ -19,8 +19,8 @@ Render the screen results grouped by category with the supporting numbers visibl
 
 ## Acceptance criteria
 
-- [ ] All three categories render with their per-row fields from fixture screen results.
-- [ ] A disabled screen shows the missing capability.
-- [ ] Mixed currencies display natively, unconverted.
-- [ ] No thresholds, predicates, or metric computation in `ui/`.
-- [ ] M6 Definition of Done satisfied.
+- [x] All three categories render with their per-row fields from fixture screen results.
+- [x] A disabled screen shows the missing capability.
+- [x] Mixed currencies display natively, unconverted.
+- [x] No thresholds, predicates, or metric computation in `ui/`.
+- [x] M6 Definition of Done satisfied.

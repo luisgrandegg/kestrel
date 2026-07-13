@@ -2,7 +2,7 @@ import type { KestrelConfig } from "../config/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { InstrumentSnapshot, Screen } from "../screens/screen.js";
 import type { Repository } from "../storage/repository.js";
-import type { Instrument, IsoDate, ScreenResolution } from "../types/index.js";
+import type { Instrument, IsoDate, ScreenEvaluation } from "../types/index.js";
 
 /**
  * Screen evaluation harness (backlog item 014) — the composition root that
@@ -29,13 +29,6 @@ import type { Instrument, IsoDate, ScreenResolution } from "../types/index.js";
  * no union casts, no repeated I/O. evaluateScreens is the convenience
  * wrapper for a homogeneous list.
  */
-
-export interface ScreenEvaluation<Match> {
-  screenId: string;
-  resolution: ScreenResolution;
-  /** Matches with their supporting numbers; empty when disabled. */
-  matches: Match[];
-}
 
 /** Read every ready instrument's evaluation inputs, bounded by asOf. */
 export function buildSnapshots(
