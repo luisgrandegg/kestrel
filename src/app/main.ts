@@ -11,9 +11,12 @@ import { activeProviders } from "./providers.js";
 /**
  * The daily pipeline (backlog item 019, M7): throttled ingestion (when a
  * provider serves "closes"), then the dashboard rendered from stored data.
- * Paths are explicit — the module-level defaults are cwd-relative and
- * assume repo-root invocation — and `today` arrives as an injected UTC
- * calendar date (the CLI derives it; nothing here reads the clock).
+ * The db/watchlist paths are explicit (the module-level defaults are
+ * cwd-relative and assume repo-root invocation); the config path is
+ * optional BY CONTRACT — absent means the §9 defaults, and the CLI
+ * resolves the override file explicitly so that choice is observable.
+ * `today` arrives as an injected UTC calendar date (the CLI derives it;
+ * nothing here reads the clock).
  */
 export interface DailyRunOptions {
   dbPath: string;

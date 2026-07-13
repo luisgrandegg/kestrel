@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { utcIsoDate } from "./clock.js";
 import { runDailyPipeline } from "./main.js";
@@ -17,12 +17,21 @@ const [
   dbPath = "data/kestrel.db",
   watchlistPath = "watchlist.json",
   dashboardPath = "dashboard.md",
-  configPath,
+  configArg,
 ] = process.argv.slice(2);
+
+// Resolve the config source HERE, explicitly and observably — relying on
+// loadConfig's cwd-relative implicit default from a non-repo-root cwd
+// would silently present §9 defaults as the user's tuned thresholds.
+const configPath =
+  configArg ??
+  (existsSync("kestrel.config.json") ? "kestrel.config.json" : undefined);
+console.log(`config: ${configPath ?? "§9 defaults (no override file)"}`);
 
 const today = utcIsoDate(new Date());
 
 mkdirSync(dirname(dbPath), { recursive: true });
+mkdirSync(dirname(dashboardPath), { recursive: true });
 const { dashboard } = await runDailyPipeline({
   dbPath,
   watchlistPath,

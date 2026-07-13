@@ -80,8 +80,9 @@ describe("runDailyPipeline — the scheduled entrypoint (backlog 019)", () => {
     expect(first.report?.backfill.promoted).toEqual(["ACME"]);
     expect(first.dashboard).toMatch(/ACME[ ]+25\.0%/);
 
-    // Run 2 (same day): ready now; metadata is inside its TTL, so only
-    // the incremental price check runs — and finds nothing new.
+    // Run 2 (same day): ready now, but run 1's backfill already stamped
+    // both sync markers for today — the once-per-day dedupe means this
+    // run fetches nothing and just re-renders the same stored world.
     const second = await runDailyPipeline(options);
     expect(second.report?.metadataRefreshed).toEqual([]);
     expect(second.dashboard).toMatch(/ACME[ ]+25\.0%/);

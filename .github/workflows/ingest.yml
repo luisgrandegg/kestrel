@@ -4,8 +4,9 @@ on:
   schedule:
     # 23:30 UTC — well after the US close (20:00/21:00 UTC), with headroom
     # for GitHub cron lag: a late (or manually repeated) run is harmless
-    # because the pipeline dedupes by UTC date. Weekend/holiday runs are
-    # no-ops for the same reason (no new trading dates to add).
+    # because the pipeline dedupes by UTC date. Same-day repeats are
+    # byte-identical no-ops; weekend/holiday runs add no closes (they only
+    # advance per-instrument sync stamps).
     - cron: "30 23 * * *"
   workflow_dispatch:
 
@@ -34,14 +35,22 @@ jobs:
       - name: Run the throttled daily pipeline
         run: node dist/app/cli.js data/kestrel.db watchlist.json dashboard.md
 
+      # NOTE: this pushes directly to main. If branch protection ever
+      # requires pull requests on main, this step will start failing and
+      # the persist target should move to a data branch.
       - name: Persist results (SQLite database + rendered dashboard)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/kestrel.db dashboard.md
           if git diff --cached --quiet; then
-            echo "No changes to persist (weekend/holiday or repeated run)."
+            echo "No changes to persist (repeated same-day run)."
           else
             git commit -m "Daily ingestion $(date -u +%F)"
-            git push
+            # A human push racing the (long, throttled) run must not lose
+            # the day's snapshots: rebase our data commit and retry.
+            for i in 1 2 3; do
+              git push && break
+              git pull --rebase origin main
+            done
           fi

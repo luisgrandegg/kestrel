@@ -10,8 +10,9 @@ symbols.
 ## Adding a ticker
 
 1. Add the symbol to the array (any casing/whitespace — tickers are
-   normalized to trimmed uppercase; duplicates after normalization are
-   rejected loudly).
+   normalized to trimmed uppercase; entries that normalize to an already
+   listed ticker are silently collapsed into it, first occurrence wins, so
+   double-check the spelling of a new symbol).
 2. Commit and push. Nothing else: the next scheduled run of the **Daily
    ingestion** Action (`.github/workflows/ingest.yml`, 23:30 UTC daily)
    registers the new instrument as `pending` and starts backfilling it.
