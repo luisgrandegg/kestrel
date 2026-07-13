@@ -21,8 +21,8 @@ The runner wires the persistent failure streak: `Repository.incrementFailures` o
 
 ## Acceptance criteria
 
-- [ ] Idempotency test: running backfill twice produces identical storage (row counts unchanged).
-- [ ] Mid-run-resume test: kill/abort partway, re-run, end state correct with no duplicates.
-- [ ] A capped/slow fake provider backfills across multiple runs without duplication.
-- [ ] Inter-call delay verifiably applied (injectable sleep/clock for tests).
-- [ ] Failure accounting: increment-on-failure / reset-on-success / demote-at-threshold, tested across simulated runs.
+- [x] Idempotency test: running backfill twice produces identical storage (row counts unchanged).
+- [x] Mid-run-resume test: kill/abort partway, re-run, end state correct with no duplicates.
+- [x] A capped/slow fake provider backfills across multiple runs without duplication.
+- [x] Inter-call delay verifiably applied (injectable sleep/clock for tests).
+- [x] Failure accounting: increment-on-failure / reset-on-success / demote-at-threshold, tested across simulated runs.
