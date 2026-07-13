@@ -24,6 +24,16 @@ export const CAPABILITIES: readonly Capability[] = [
   "dividendCalendar",
 ];
 
+/**
+ * Result of resolving a screen's required capabilities against the active
+ * providers (CONSTITUTION.md §2.1). Lives here — not in providers/ — because
+ * its consumers (the screening harness and the UI's disabled-screen state)
+ * sit on the far side of the provider seam and may not import providers/.
+ */
+export type ScreenResolution =
+  | { readonly enabled: true }
+  | { readonly enabled: false; readonly missing: readonly Capability[] };
+
 /** Instrument ingestion lifecycle (MVP.md §7). */
 export type InstrumentState = "pending" | "backfilling" | "ready" | "error";
 
