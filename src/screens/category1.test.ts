@@ -4,6 +4,7 @@ import { resolveConfig } from "../config/index.js";
 import { ProviderRegistry } from "../providers/registry.js";
 import { Repository } from "../storage/repository.js";
 import { providerWith } from "../test-support/fakeProvider.js";
+import { instrumentSnapshot } from "../test-support/instrumentSnapshot.js";
 import type { DailyClose, IsoDate } from "../types/index.js";
 import { makeCategory1Screen } from "./category1.js";
 import type { InstrumentSnapshot } from "./screen.js";
@@ -42,16 +43,12 @@ const snapshot = (
   if (latestClose === undefined) {
     throw new Error("fixture needs at least one close");
   }
-  return {
-    ticker: "ACME",
-    currency: "USD",
+  return instrumentSnapshot({
     asOf: ASOF,
     latestClose,
     analyst: { ticker: "ACME", asOf: ASOF, medianTarget, numAnalysts },
-    earnings: null,
-    dividend: null,
     closes,
-  };
+  });
 };
 
 describe("category 1 — volatile + undervalued (MVP.md §6 row 1)", () => {
