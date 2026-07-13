@@ -37,8 +37,11 @@ export const INSTRUMENT_STATES: readonly InstrumentState[] = [
 /** A watchlist instrument and its ingestion bookkeeping (MVP.md §4). */
 export interface Instrument {
   ticker: string;
-  /** Native trading currency; values render unconverted (MVP.md §8). */
-  currency: string;
+  /**
+   * Native trading currency; values render unconverted (MVP.md §8).
+   * `null` until the first provider metadata fetch reports it.
+   */
+  currency: string | null;
   state: InstrumentState;
   addedAt: IsoDate;
   lastPriceSync: IsoDate | null;
