@@ -65,6 +65,17 @@ module.exports = {
       to: {},
     },
     {
+      name: "app-is-top",
+      comment:
+        "src/app/ is the composition root (the one place that may import " +
+        "both screens/ and providers/); nothing else may import it.",
+      severity: "error",
+      from: {
+        path: "^src/(metrics|screens|storage|ui|providers|ingest|config|types)/",
+      },
+      to: { path: "^src/app/" },
+    },
+    {
       name: "no-circular",
       comment:
         "Seams are one-directional; cycles mean a seam has been breached.",
