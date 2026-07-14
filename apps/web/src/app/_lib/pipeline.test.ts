@@ -11,8 +11,7 @@ const ASOF = "2026-07-31";
 /**
  * getDashboardData is typed against the StorageRepository PORT, so it runs
  * here over the SQLite engine exactly as it runs over Postgres in
- * production — the engine-agnosticism the seam guarantees. Seeding mirrors
- * apps/cli/src/app/dashboard.test.ts (the text renderer's twin).
+ * production — the engine-agnosticism the seam guarantees.
  */
 describe("getDashboardData — storage to typed screen evaluations", () => {
   const seed = async (repo: StorageRepository): Promise<void> => {

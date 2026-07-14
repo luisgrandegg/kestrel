@@ -4,8 +4,9 @@ import { runIngestion } from "../../_lib/pipeline";
 
 /**
  * The ingest worker's trigger (ADR-0011): Vercel Cron GETs this route on
- * the schedule in vercel.json (30 23 * * * UTC — same slot as the GitHub
- * Action), authenticated with `Authorization: Bearer ${CRON_SECRET}`.
+ * the schedule in vercel.json (30 23 * * * UTC — well after the US close),
+ * authenticated with `Authorization: Bearer ${CRON_SECRET}`. It is the sole
+ * scheduled ingestion path (ADR-0013 retired the GitHub Action).
  *
  * The pipeline is idempotent + resumable by design (guardrail 7), so a
  * function timeout mid-backfill just resumes on the next fire, and a

@@ -31,11 +31,11 @@ reference engine in the storage contract tests.
 
 ## Acceptance criteria
 
-- [ ] `apps/cli` and `.github/workflows/ingest.yml` removed; `pnpm build`,
+- [x] `apps/cli` and `.github/workflows/ingest.yml` removed; `pnpm build`,
       `pnpm test`, `pnpm lint`, `pnpm typecheck` all green.
-- [ ] The storage contract suite still runs against BOTH engines (SQLite
+- [x] The storage contract suite still runs against BOTH engines (SQLite
       reference + PGlite-Postgres); no drop in coverage.
-- [ ] No dangling references to the CLI/Action/`pnpm daily` in README,
+- [x] No dangling references to the CLI/Action/`pnpm daily` in README,
       `docs/deploy.md`, or code comments (grep-clean).
-- [ ] Seam lint still enforces every surviving boundary (probe-verify the
+- [x] Seam lint still enforces every surviving boundary (probe-verify the
       rules that changed).

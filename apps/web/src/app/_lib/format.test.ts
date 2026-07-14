@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { money, percent } from "./format";
 
-/**
- * Pins the §8 number formats — the same shapes the CLI renderer's tests pin
- * for its twin formatters (apps/cli/src/ui/dashboard.ts).
- */
-describe("dashboard formatters (web twin)", () => {
+/** Pins the §8 dashboard number formats. */
+describe("dashboard formatters", () => {
   it("renders implied upside as a one-decimal percentage", () => {
     expect(percent(0.25)).toBe("25.0%");
     expect(percent(0.2)).toBe("20.0%");

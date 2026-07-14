@@ -9,12 +9,10 @@ import type {
 import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 
 /**
- * Screen evaluation harness — the web composition root's twin of
- * apps/cli/src/app/evaluateScreens.ts (keep the two in sync). Duplicated
- * rather than shared because this harness is composition-root code — the
- * one kind of module allowed to import both screens/ and providers/
- * (registry) — and apps cannot import apps; hoisting it into a package
- * would force screens/ and providers/ to meet below the composition roots.
+ * Screen evaluation harness — composition-root code: the one kind of module
+ * allowed to import both screens/ and providers/ (registry). It stays here
+ * in apps/web (the sole composition root) rather than in a package, so
+ * screens/ and providers/ never meet below the composition root.
  *
  * Given the repository and an explicit as-of date, it builds each ready
  * instrument's snapshot from storage, consults the registry, and evaluates

@@ -31,12 +31,12 @@ import { poolExecutor } from "./db";
 import { buildSnapshots, evaluateScreen } from "./evaluateScreens";
 
 /**
- * Composition glue for the web app (ADR-0011) — the web twin of
- * apps/cli/src/app/main.ts: it wires storage (Supabase Postgres via the
- * pg-pool executor), the provider registry, config, and the watchlist, and
- * exposes the two operations the routes need: `getDashboardData` (screen
- * results as data, rendered by page.tsx) and `runIngestion` (the daily
- * pipeline behind the Vercel-Cron route).
+ * Composition glue for the web app (ADR-0011) — the sole composition root:
+ * it wires storage (Supabase Postgres via the pg-pool executor), the
+ * provider registry, config, and the watchlist, and exposes the two
+ * operations the routes need: `getDashboardData` (screen results as data,
+ * rendered by page.tsx) and `runIngestion` (the daily pipeline behind the
+ * Vercel-Cron route).
  *
  * Config: there is no repo-root cwd on Vercel, so file-based overrides
  * (kestrel.config.json) don't apply here — overrides arrive as JSON in the
@@ -55,8 +55,8 @@ export interface DashboardData {
 }
 
 /**
- * Evaluate the three MVP screens over one set of as-of-bounded snapshots
- * (the data-shaped twin of apps/cli/src/app/dashboard.ts's buildDashboard).
+ * Evaluate the three MVP screens over one set of as-of-bounded snapshots,
+ * returning the §8 dashboard as data (rendered by page.tsx).
  * Typed against the StorageRepository PORT, never an engine: tests run it
  * over SQLite, production hands it the Postgres repository.
  */
@@ -164,9 +164,9 @@ export interface IngestionOutcome {
 }
 
 /**
- * The daily ingestion pipeline (the cron route's body) — mirrors the CLI's
- * runDailyPipeline: run the throttled daily refresh + backfill over the
- * registered adapters (the Yahoo adapter serves "closes"). The skip branch
+ * The daily ingestion pipeline (the cron route's body): run the throttled
+ * daily refresh + backfill over the registered adapters (the Yahoo adapter
+ * serves "closes"). The skip branch
  * remains as defensive degradation: were no active provider to serve
  * "closes", it would skip loudly rather than fabricate. Idempotent and
  * resumable by design, so a function timeout mid-backfill simply resumes on

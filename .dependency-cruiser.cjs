@@ -7,9 +7,10 @@
  *
  * Monorepo layout: the pure domain lives in packages/core (types, config,
  * metrics, storage, screens), the worker library in packages/ingest
- * (providers, ingest), and the composition root + presentation in apps/cli
- * (app, ui). Workspace dependencies already encode the coarse direction
- * (core ← ingest ← cli); these rules keep the fine-grained seams.
+ * (providers, ingest), and the composition root + presentation in apps/web
+ * (src/app, with _lib the composition glue and the pages the presentation).
+ * Workspace dependencies already encode the coarse direction
+ * (core ← ingest ← web); these rules keep the fine-grained seams.
  */
 
 /** @type {import('dependency-cruiser').IConfiguration} */
@@ -18,11 +19,13 @@ module.exports = {
     {
       name: "only-ingest-reaches-providers",
       comment:
-        "metrics/, screens/, storage/, and ui/ must never import from providers/ " +
-        "(CLAUDE.md guardrail 1). Everything downstream reads from storage.",
+        "metrics/, screens/, and storage/ must never import from providers/ " +
+        "(CLAUDE.md guardrail 1). Everything downstream reads from storage. " +
+        "The web pages (presentation) are held to the same bar by " +
+        "web-pages-render-only.",
       severity: "error",
       from: {
-        path: "^(packages/core/src/(metrics|screens|storage)|apps/cli/src/ui)/",
+        path: "^packages/core/src/(metrics|screens|storage)/",
       },
       to: { path: "^packages/ingest/src/providers/" },
     },
@@ -73,21 +76,7 @@ module.exports = {
       severity: "error",
       from: { path: "^packages/core/src/(metrics|screens)/" },
       to: {
-        path: "^packages/ingest/src/ingest/|^apps/cli/src/ui/|^(node:)?(fs|fs/promises|http|https|net|child_process)$",
-      },
-    },
-    {
-      name: "ui-renders-only",
-      comment:
-        "Presentation renders what screening produced — nothing else. It may " +
-        "import only screens/ (result shapes) and types/: reading storage, " +
-        "metrics, or config from ui/ would reach around screening and put " +
-        "judgement in presentation (CONSTITUTION.md §2.2); no I/O either.",
-      severity: "error",
-      from: { path: "^apps/cli/src/ui/" },
-      to: {
-        path: "^(packages|apps)/|^(node:)?(fs|fs/promises|http|https|net|child_process)$",
-        pathNot: "^packages/core/src/(screens|types)/|^apps/cli/src/ui/",
+        path: "^packages/ingest/src/ingest/|^(node:)?(fs|fs/promises|http|https|net|child_process)$",
       },
     },
     {
@@ -111,17 +100,6 @@ module.exports = {
       to: { path: "^apps/[^/]+/src/app/" },
     },
     {
-      name: "apps-do-not-import-other-apps",
-      comment:
-        "Apps are independent composition roots: no app may import another " +
-        "app's code. Package specifiers already fail (no workspace " +
-        "dependency → not-to-unresolvable), but a RELATIVE path across " +
-        "apps/ would resolve fine — the $1 group pins each app to itself.",
-      severity: "error",
-      from: { path: "^apps/([^/]+)/" },
-      to: { path: "^apps/", pathNot: "^apps/$1/" },
-    },
-    {
       name: "web-pages-render-only",
       comment:
         "apps/web's route components (everything in src/app outside _lib " +
@@ -143,24 +121,26 @@ module.exports = {
     {
       name: "packages-do-not-import-apps",
       comment:
-        "apps/cli is the top of the graph: no library package may import " +
+        "apps/web is the top of the graph: no library package may import " +
         "anything from an app (the workspace dependency direction is " +
-        "core ← ingest ← cli, never the reverse).",
+        "core ← ingest ← web, never the reverse).",
       severity: "error",
       from: { path: "^packages/" },
       to: { path: "^apps/" },
     },
     {
-      name: "screens-feed-app-and-ui-only",
+      name: "screens-feed-app-only",
       comment:
-        "Screening sits above storage/metrics and below the composition root " +
-        "and presentation: only app/ and ui/ may consume screens/. Anything " +
-        "else importing a screen (e.g. ingestion pre-filtering by screen " +
-        "predicates) inverts the one-directional flow (CONSTITUTION.md §2.2).",
+        "Screening sits above storage/metrics and below the composition root: " +
+        "only a composition root (an app's src/app/, which includes the web " +
+        "presentation Next.js forces to live there) may consume screens/. " +
+        "Anything else importing a screen (e.g. ingestion pre-filtering by " +
+        "screen predicates) inverts the one-directional flow " +
+        "(CONSTITUTION.md §2.2).",
       severity: "error",
       from: {
         path: "^(packages|apps)/",
-        pathNot: "^(apps/[^/]+/src/(app|ui)|packages/core/src/screens)/",
+        pathNot: "^(apps/[^/]+/src/app|packages/core/src/screens)/",
       },
       to: { path: "^packages/core/src/screens/" },
     },

@@ -55,8 +55,8 @@ Set these on the Vercel project (Production):
 ## 4. Verify the cron
 
 `apps/web/vercel.json` schedules `GET /api/ingest` at `30 23 * * *` UTC —
-the same slot as the GitHub Action (well after the US close, tolerant of
-cron lag because the pipeline dedupes by UTC date).
+well after the US close, tolerant of cron lag because the pipeline dedupes
+by UTC date.
 
 - Check Vercel dashboard → project → Settings → Cron Jobs after the first
   production deployment: **crons only run on production deployments**.
@@ -83,9 +83,8 @@ A runtime timeout mid-run is fine by design: ingestion is idempotent and
 resumable (guardrail 7), so a cut-off backfill simply resumes on the next
 fire without duplicating anything. If the watchlist outgrows the function
 ceiling, the escape hatch recorded in ADR-0011 is to move
-`packages/ingest` to a dedicated runner (a real worker, or back to the
-GitHub Action) — it is a separate package precisely so that move touches
-no internals.
+`packages/ingest` to a dedicated runner (a real worker) — it is a separate
+package precisely so that move touches no internals.
 
 ## 5b. TLS to Supabase
 
@@ -104,14 +103,6 @@ The web app bundles `watchlist.json` at build time (there is no repo
 checkout inside a serverless function), so **editing the watchlist takes
 effect on the next Vercel deployment**, not the next cron fire. Pushing
 the edit to the connected branch triggers that deploy automatically; a
-rollback or skipped build keeps serving the old list. The GitHub Action
-path (below) reads the file fresh each run — if both pipelines are
-active, remember they can briefly disagree until the deploy lands.
-
-## 6. The existing GitHub Action
-
-`.github/workflows/ingest.yml` keeps running the same daily pipeline
-against the repo-committed SQLite file, entirely independent of the Vercel
-deployment (two engines behind one storage seam; they do not share data).
-Once Supabase is live and trusted it can be disabled (owner's call) —
-delete the workflow or comment out its `schedule` trigger.
+rollback or skipped build keeps serving the old list. (Backlog item 021
+retires the bundled file, moving the watchlist behind the storage seam as
+per-user rows queried live.)
