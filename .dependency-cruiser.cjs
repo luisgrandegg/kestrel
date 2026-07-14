@@ -105,12 +105,40 @@ module.exports = {
         "Each app's src/app/ is a composition root (the one place that may " +
         "import both screens/ and providers/, and construct a repository); " +
         "nothing else may import either app's app dir — including " +
-        "directories that don't exist yet (pathNot, not an allowlist). " +
-        "Cross-app imports are additionally impossible via package " +
-        "specifiers (no workspace dependency → not-to-unresolvable).",
+        "directories that don't exist yet (pathNot, not an allowlist).",
       severity: "error",
       from: { pathNot: "^apps/[^/]+/src/app/" },
       to: { path: "^apps/[^/]+/src/app/" },
+    },
+    {
+      name: "apps-do-not-import-other-apps",
+      comment:
+        "Apps are independent composition roots: no app may import another " +
+        "app's code. Package specifiers already fail (no workspace " +
+        "dependency → not-to-unresolvable), but a RELATIVE path across " +
+        "apps/ would resolve fine — the $1 group pins each app to itself.",
+      severity: "error",
+      from: { path: "^apps/([^/]+)/" },
+      to: { path: "^apps/", pathNot: "^apps/$1/" },
+    },
+    {
+      name: "web-pages-render-only",
+      comment:
+        "apps/web's route components (everything in src/app outside _lib " +
+        "and api) are PRESENTATION: like the CLI's ui/, they render what " +
+        "screening produced and must not reach storage, metrics, config, " +
+        "ingestion, or providers directly (CONSTITUTION.md §2.2) — that is " +
+        "the composition glue's job (_lib). Next.js forces pages to live " +
+        "inside the app dir, so this rule re-creates the app/ vs ui/ split " +
+        "the CLI gets from directories.",
+      severity: "error",
+      from: {
+        path: "^apps/web/src/app/",
+        pathNot: "^apps/web/src/app/(_lib|api)/",
+      },
+      to: {
+        path: "^packages/core/src/(storage|metrics|config)/|^packages/ingest/src/|^(node:)?(fs|fs/promises|http|https|net|child_process)$",
+      },
     },
     {
       name: "packages-do-not-import-apps",

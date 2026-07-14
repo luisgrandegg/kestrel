@@ -9,7 +9,11 @@ import type {
 import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 
 /**
- * Screen evaluation harness (backlog item 014) — the composition root that
+ * Screen evaluation harness (backlog item 014) — composition-root code.
+ * TWIN: apps/web/src/app/_lib/evaluateScreens.ts carries a deliberate
+ * copy (apps cannot import apps); keep the two in sync.
+ *
+ * This is the composition root that
  * may import both screens/ and providers/ (recorded on the backlog item;
  * the boundary lint pins apps/cli/src/app/ as the top of the graph).
  *

@@ -28,6 +28,13 @@ function getPool(): pg.Pool {
       );
     }
     pool = new pg.Pool({ connectionString });
+    // Idle clients dropped by Supabase's pooler emit 'error' on the pool;
+    // without a listener Node treats it as an uncaught 'error' event and
+    // kills the warm instance (the pg docs' "this will crash your app").
+    // Log and let the pool evict the client — the next query reconnects.
+    pool.on("error", (error) => {
+      console.error("pg pool: idle client error (evicted)", error);
+    });
   }
   return pool;
 }
@@ -57,19 +64,26 @@ export function poolExecutor(): SqlExecutor {
     },
     // Transactions run on a single checked-out client with explicit
     // BEGIN/COMMIT/ROLLBACK (a pool-level BEGIN would land on an arbitrary
-    // connection); the client is always released, even on rollback failure.
+    // connection). The ORIGINAL error always propagates: a ROLLBACK that
+    // fails too (dead connection) is swallowed, and the client is then
+    // released WITH the error so the pool destroys it instead of handing
+    // the broken connection to the next checkout.
     async transaction<T>(fn: (tx: SqlQueryable) => Promise<T>): Promise<T> {
       const client = await getPool().connect();
       try {
         await client.query("BEGIN");
         const result = await fn(asQueryable(client));
         await client.query("COMMIT");
+        client.release();
         return result;
       } catch (error) {
-        await client.query("ROLLBACK");
+        try {
+          await client.query("ROLLBACK");
+          client.release();
+        } catch {
+          client.release(true);
+        }
         throw error;
-      } finally {
-        client.release();
       }
     },
     async end() {

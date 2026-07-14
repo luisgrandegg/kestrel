@@ -15,8 +15,9 @@ the app itself via a Vercel-Cron-invoked route (`/api/ingest`).
      and run `supabase db push` (the migration lives in the conventional
      `supabase/migrations/` directory).
 3. Copy the **Transaction pooler** connection string (Project settings →
-   Database → Connection string → Transaction pooler, port 6543). This is
-   the `DATABASE_URL` below.
+   Database → Connection string → Transaction pooler, port 6543) and
+   append `?sslmode=require` (see §5b — without it node-postgres connects
+   unencrypted). This is the `DATABASE_URL` below.
 
    > **Why the transaction pooler works here:** node-postgres is generally
    > constrained under pgBouncer's transaction mode (no session state, no
@@ -69,14 +70,42 @@ cron lag because the pipeline dedupes by UTC date).
 
 ## 5. Function duration
 
-The route sets `maxDuration = 300`, but the effective ceiling is
-plan-dependent (Hobby caps lower than Pro; check Vercel's current limits).
-This is fine by design: ingestion is idempotent and resumable (guardrail
-7), so a timeout mid-backfill simply resumes on the next fire without
-duplicating anything. If the watchlist outgrows the function ceiling, the
-escape hatch recorded in ADR-0011 is to move `packages/ingest` to a
-dedicated runner (a real worker, or back to the GitHub Action) — it is a
-separate package precisely so that move touches no internals.
+The route sets `maxDuration = 300`. On projects with **Fluid compute**
+(the default for new Vercel projects) that value is allowed on every plan.
+On an older project with Fluid disabled, Hobby's ceiling is 60 — and
+Vercel then **rejects the deployment** ("maxDuration must be between 1
+and 60") rather than clamping at runtime. If you hit that, either enable
+Fluid compute for the project or lower `maxDuration` in
+`apps/web/src/app/api/ingest/route.ts`.
+
+A runtime timeout mid-run is fine by design: ingestion is idempotent and
+resumable (guardrail 7), so a cut-off backfill simply resumes on the next
+fire without duplicating anything. If the watchlist outgrows the function
+ceiling, the escape hatch recorded in ADR-0011 is to move
+`packages/ingest` to a dedicated runner (a real worker, or back to the
+GitHub Action) — it is a separate package precisely so that move touches
+no internals.
+
+## 5b. TLS to Supabase
+
+`node-postgres` does **not** negotiate TLS unless asked: with a bare
+pooler URL the connection is unencrypted. Use the connection string
+exactly as Supabase's dashboard shows it and append `?sslmode=require`
+(pg understands it in the URL). If Postgres then complains about a
+self-signed certificate in the chain, either supply Supabase's CA
+(Project settings → Database → SSL) via `sslrootcert`, or fall back to
+`?sslmode=no-verify` (encrypted, unverified — still strictly better than
+plaintext).
+
+## 5c. Watchlist changes need a redeploy
+
+The web app bundles `watchlist.json` at build time (there is no repo
+checkout inside a serverless function), so **editing the watchlist takes
+effect on the next Vercel deployment**, not the next cron fire. Pushing
+the edit to the connected branch triggers that deploy automatically; a
+rollback or skipped build keeps serving the old list. The GitHub Action
+path (below) reads the file fresh each run — if both pipelines are
+active, remember they can briefly disagree until the deploy lands.
 
 ## 6. The existing GitHub Action
 
