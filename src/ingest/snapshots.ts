@@ -1,5 +1,5 @@
 import type { ProviderRegistry } from "../providers/registry.js";
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { IsoDate } from "../types/index.js";
 import type { Throttle } from "./throttle.js";
 
@@ -14,24 +14,24 @@ import type { Throttle } from "./throttle.js";
 export async function fetchMetadataSnapshots(
   registry: ProviderRegistry,
   throttle: Throttle,
-  repo: Repository,
+  repo: StorageRepository,
   ticker: string,
   today: IsoDate,
 ): Promise<void> {
   const analyst = registry.providersFor("analystTargets")[0];
   if (analyst?.getAnalystTargets !== undefined) {
     const fetch = analyst.getAnalystTargets.bind(analyst);
-    repo.insertAnalystSnapshot(await throttle(() => fetch(ticker)));
+    await repo.insertAnalystSnapshot(await throttle(() => fetch(ticker)));
   }
   const earnings = registry.providersFor("earningsCalendar")[0];
   if (earnings?.getNextEarnings !== undefined) {
     const fetch = earnings.getNextEarnings.bind(earnings);
-    repo.insertEarningsSnapshot(await throttle(() => fetch(ticker)));
+    await repo.insertEarningsSnapshot(await throttle(() => fetch(ticker)));
   }
   const dividends = registry.providersFor("dividendCalendar")[0];
   if (dividends?.getNextExDividend !== undefined) {
     const fetch = dividends.getNextExDividend.bind(dividends);
-    repo.insertDividendSnapshot(await throttle(() => fetch(ticker)));
+    await repo.insertDividendSnapshot(await throttle(() => fetch(ticker)));
   }
-  repo.recordMetadataSync(ticker, today);
+  await repo.recordMetadataSync(ticker, today);
 }

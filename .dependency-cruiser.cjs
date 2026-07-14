@@ -28,6 +28,19 @@ module.exports = {
       to: { path: "yahoo-finance2" },
     },
     {
+      name: "port-not-driver",
+      comment:
+        "Consumers depend on the storage seam contract (storage/port), " +
+        "never a concrete driver: only storage/ itself and the composition " +
+        "root (app/, which constructs one) may import the repository module.",
+      severity: "error",
+      from: {
+        path: "^src/",
+        pathNot: "^src/(storage|app)/",
+      },
+      to: { path: "^src/storage/repository" },
+    },
+    {
       name: "only-storage-touches-sqlite",
       comment:
         "The storage repository is the only code allowed to touch SQLite (MVP.md §11).",

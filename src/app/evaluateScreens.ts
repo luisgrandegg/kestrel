@@ -1,7 +1,7 @@
 import type { KestrelConfig } from "../config/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
 import type { InstrumentSnapshot, Screen } from "../screens/screen.js";
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { Instrument, IsoDate, ScreenEvaluation } from "../types/index.js";
 
 /**
@@ -31,15 +31,20 @@ import type { Instrument, IsoDate, ScreenEvaluation } from "../types/index.js";
  */
 
 /** Read every ready instrument's evaluation inputs, bounded by asOf. */
-export function buildSnapshots(
-  repo: Repository,
+export async function buildSnapshots(
+  repo: StorageRepository,
   config: KestrelConfig,
   asOf: IsoDate,
-): InstrumentSnapshot[] {
-  return repo
-    .listInstruments("ready")
-    .map((instrument) => buildSnapshot(repo, config, instrument, asOf))
-    .filter((s): s is InstrumentSnapshot => s !== null);
+): Promise<InstrumentSnapshot[]> {
+  const instruments = await repo.listInstruments("ready");
+  const snapshots: InstrumentSnapshot[] = [];
+  for (const instrument of instruments) {
+    const snapshot = await buildSnapshot(repo, config, instrument, asOf);
+    if (snapshot !== null) {
+      snapshots.push(snapshot);
+    }
+  }
+  return snapshots;
 }
 
 /** Resolve one screen against the registry and evaluate it if enabled. */
@@ -63,17 +68,17 @@ export function evaluateScreen<Match>(
  * are only read from storage when at least one screen is enabled — a fully
  * disabled run does no per-instrument I/O.
  */
-export function evaluateScreens<Match>(
-  repo: Repository,
+export async function evaluateScreens<Match>(
+  repo: StorageRepository,
   registry: ProviderRegistry,
   config: KestrelConfig,
   screens: readonly Screen<Match>[],
   asOf: IsoDate,
-): ScreenEvaluation<Match>[] {
+): Promise<ScreenEvaluation<Match>[]> {
   const anyEnabled = screens.some(
     (screen) => registry.resolveScreen(screen.requiredCapabilities).enabled,
   );
-  const snapshots = anyEnabled ? buildSnapshots(repo, config, asOf) : [];
+  const snapshots = anyEnabled ? await buildSnapshots(repo, config, asOf) : [];
   return screens.map((screen) => evaluateScreen(snapshots, registry, screen));
 }
 
@@ -84,13 +89,13 @@ export function evaluateScreens<Match>(
  * The latest close is the tail of the lookback window (lookbackTradingDays
  * is validated >= 2), not a separate query.
  */
-function buildSnapshot(
-  repo: Repository,
+async function buildSnapshot(
+  repo: StorageRepository,
   config: KestrelConfig,
   instrument: Instrument,
   asOf: IsoDate,
-): InstrumentSnapshot | null {
-  const closes = repo.lastNCloses(
+): Promise<InstrumentSnapshot | null> {
+  const closes = await repo.lastNCloses(
     instrument.ticker,
     config.fluctuation.lookbackTradingDays,
     asOf,
@@ -104,9 +109,12 @@ function buildSnapshot(
     currency: instrument.currency,
     asOf,
     latestClose,
-    analyst: repo.latestAnalystSnapshot(instrument.ticker, asOf) ?? null,
-    earnings: repo.latestEarningsSnapshot(instrument.ticker, asOf) ?? null,
-    dividend: repo.latestDividendSnapshot(instrument.ticker, asOf) ?? null,
+    analyst:
+      (await repo.latestAnalystSnapshot(instrument.ticker, asOf)) ?? null,
+    earnings:
+      (await repo.latestEarningsSnapshot(instrument.ticker, asOf)) ?? null,
+    dividend:
+      (await repo.latestDividendSnapshot(instrument.ticker, asOf)) ?? null,
     closes,
   };
 }

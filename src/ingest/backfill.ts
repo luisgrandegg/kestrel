@@ -1,6 +1,6 @@
 import type { KestrelConfig } from "../config/index.js";
 import type { ProviderRegistry } from "../providers/registry.js";
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { Instrument, IsoDate } from "../types/index.js";
 import { chargeProviderFailure } from "./failures.js";
 import { promoteWhenCovered, startBackfill } from "./lifecycle.js";
@@ -35,7 +35,7 @@ import {
  */
 
 export interface BackfillDeps {
-  repo: Repository;
+  repo: StorageRepository;
   registry: ProviderRegistry;
   config: KestrelConfig;
   /** The run's as-of date (UTC trading-calendar date), injected. */
@@ -80,8 +80,8 @@ export async function runBackfill(
     deps.throttle ??
     makeThrottle(deps.sleep, config.ingestion.interCallDelayMs);
 
-  registerWatchlist(repo, watchlist, today);
-  const targets = syncableInstruments(repo, watchlist).filter(
+  await registerWatchlist(repo, watchlist, today);
+  const targets = (await syncableInstruments(repo, watchlist)).filter(
     (i) => i.state === "pending" || i.state === "backfilling",
   );
 
@@ -90,24 +90,28 @@ export async function runBackfill(
     promoted: [],
     failures: [],
     errored: [],
-    skippedErrored: erroredInstruments(repo, watchlist).map((i) => i.ticker),
+    skippedErrored: (await erroredInstruments(repo, watchlist)).map(
+      (i) => i.ticker,
+    ),
   };
 
   for (const instrument of targets) {
     const { ticker } = instrument;
     const state = startBackfill(instrument.state);
     if (state !== instrument.state) {
-      repo.setInstrumentState(ticker, state);
+      await repo.setInstrumentState(ticker, state);
     }
     try {
       await backfillOne(deps, fetchCloses, throttle, instrument);
-      repo.resetFailures(ticker);
+      await repo.resetFailures(ticker);
       report.processed.push(ticker);
 
-      const covered = repo.lastNCloses(
-        ticker,
-        config.fluctuation.lookbackTradingDays,
-        today,
+      const covered = (
+        await repo.lastNCloses(
+          ticker,
+          config.fluctuation.lookbackTradingDays,
+          today,
+        )
       ).length;
       const next = promoteWhenCovered(
         state,
@@ -115,11 +119,17 @@ export async function runBackfill(
         config.fluctuation.lookbackTradingDays,
       );
       if (next !== state) {
-        repo.setInstrumentState(ticker, next);
+        await repo.setInstrumentState(ticker, next);
         report.promoted.push(ticker);
       }
     } catch (error) {
-      const charged = chargeProviderFailure(repo, config, state, ticker, error);
+      const charged = await chargeProviderFailure(
+        repo,
+        config,
+        state,
+        ticker,
+        error,
+      );
       report.failures.push({ ticker, message: charged.message });
       if (charged.errored) {
         report.errored.push(ticker);

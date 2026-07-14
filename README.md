@@ -115,7 +115,8 @@ src/
   config/     §9 defaults + validated overrides
   types/      shared DTOs, guards — the pure leaf every layer may import
   metrics/    impliedUpside, completedFluctuations, daysToEvent (pure)
-  storage/    schema + repository — the only code that touches SQLite
+  storage/    the seam contract (port) + SQLite repository — the only code
+              that touches the database; consumers type against the port
   providers/  Provider interface, capability registry (adapters plug in here)
   ingest/     backfill + daily refresh (state machine, throttle, watchlist)
   screens/    the three category predicates + shared base predicate

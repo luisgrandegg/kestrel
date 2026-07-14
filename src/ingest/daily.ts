@@ -68,13 +68,13 @@ export async function runDaily(
     deps.throttle ??
     makeThrottle(deps.sleep, config.ingestion.interCallDelayMs);
 
-  registerWatchlist(repo, watchlist, today);
-  const ready = syncableInstruments(repo, watchlist).filter(
+  await registerWatchlist(repo, watchlist, today);
+  const ready = (await syncableInstruments(repo, watchlist)).filter(
     (i) => i.state === "ready",
   );
   // Snapshot BEFORE the refresh loop: instruments demoted this run belong
   // in `errored`, not in `skippedErrored`.
-  const skippedErrored = erroredInstruments(repo, watchlist).map(
+  const skippedErrored = (await erroredInstruments(repo, watchlist)).map(
     (i) => i.ticker,
   );
 
@@ -90,7 +90,7 @@ export async function runDaily(
     // A ready instrument always has stored history (promotion required
     // coverage). Its absence means a back-dated run date or tampered
     // storage — fail loud instead of silently re-fetching a year.
-    if (repo.latestClose(ticker, today) === undefined) {
+    if ((await repo.latestClose(ticker, today)) === undefined) {
       throw new Error(
         `Invariant violated: ready instrument ${ticker} has no stored close on or before ${today} — refusing to silently re-backfill; check the injected run date`,
       );
@@ -125,9 +125,9 @@ export async function runDaily(
       // Reset only when the WHOLE body succeeded: resetting after prices
       // alone would pin the streak at 1 and a broken metadata endpoint
       // could never demote (MVP §7 "repeated adapter failure").
-      repo.resetFailures(ticker);
+      await repo.resetFailures(ticker);
     } catch (error) {
-      const charged = chargeProviderFailure(
+      const charged = await chargeProviderFailure(
         repo,
         config,
         instrument.state,

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import type { Repository } from "../storage/repository.js";
+import type { StorageRepository } from "../storage/port.js";
 import type { Instrument, IsoDate } from "../types/index.js";
 
 /**
@@ -79,13 +79,13 @@ export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {
  * Normalizes its inputs so a raw-cased caller can never create a duplicate
  * instrument row alongside the canonical one.
  */
-export function registerWatchlist(
-  repo: Repository,
+export async function registerWatchlist(
+  repo: StorageRepository,
   tickers: readonly string[],
   addedAt: IsoDate,
-): void {
+): Promise<void> {
   for (const ticker of tickers) {
-    repo.addInstrument(normalizeTicker(ticker), addedAt);
+    await repo.addInstrument(normalizeTicker(ticker), addedAt);
   }
 }
 
@@ -93,12 +93,13 @@ export function registerWatchlist(
  * Watchlist instruments in sticky `error` state (skipped by runs; reported
  * so a dead watchlist is never silent — sticky-error decision on 011).
  */
-export function erroredInstruments(
-  repo: Repository,
+export async function erroredInstruments(
+  repo: StorageRepository,
   watchlist: readonly string[],
-): Instrument[] {
+): Promise<Instrument[]> {
   const active = new Set(watchlist.map(normalizeTicker));
-  return repo.listInstruments("error").filter((i) => active.has(i.ticker));
+  const errored = await repo.listInstruments("error");
+  return errored.filter((i) => active.has(i.ticker));
 }
 
 /**
@@ -106,12 +107,12 @@ export function erroredInstruments(
  * `error` instruments — see {@link erroredInstruments}, which runs report
  * for visibility.
  */
-export function syncableInstruments(
-  repo: Repository,
+export async function syncableInstruments(
+  repo: StorageRepository,
   watchlist: readonly string[],
-): Instrument[] {
+): Promise<Instrument[]> {
   const active = new Set(watchlist.map(normalizeTicker));
-  const instruments = repo.listInstruments();
+  const instruments = await repo.listInstruments();
   const known = new Set(instruments.map((i) => i.ticker));
   const unregistered = [...active].filter((t) => !known.has(t));
   if (unregistered.length > 0) {

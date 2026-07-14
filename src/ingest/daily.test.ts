@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { resolveConfig } from "../config/index.js";
 import type { Provider } from "../providers/provider.js";
 import { ProviderRegistry } from "../providers/registry.js";
+import type { StorageRepository } from "../storage/port.js";
 import { Repository } from "../storage/repository.js";
 import type { Capability, DailyClose, IsoDate } from "../types/index.js";
 import type { BackfillDeps } from "./backfill.js";
@@ -93,42 +94,42 @@ const makeDeps = (provider: Provider): BackfillDeps & { sleeps: number[] } => {
 };
 
 /** A ready instrument with history through `lastDate` and fresh metadata. */
-const seedReady = (
-  repo: Repository,
+const seedReady = async (
+  repo: StorageRepository,
   ticker: string,
   lastDate: IsoDate,
   metadataSyncedOn: IsoDate,
-): void => {
-  repo.addInstrument(ticker, "2026-01-01");
+): Promise<void> => {
+  await repo.addInstrument(ticker, "2026-01-01");
   const closes: DailyClose[] = [];
   for (let i = 99; i >= 0; i--) {
     closes.push({ ticker, date: addDays(lastDate, -i), close: 100 });
   }
-  repo.insertCloses(closes);
-  repo.insertAnalystSnapshot({
+  await repo.insertCloses(closes);
+  await repo.insertAnalystSnapshot({
     ticker,
     asOf: metadataSyncedOn,
     medianTarget: 110,
     numAnalysts: 7,
   });
-  repo.recordMetadataSync(ticker, metadataSyncedOn);
-  repo.recordPriceSync(ticker, lastDate);
-  repo.setInstrumentState(ticker, "ready");
+  await repo.recordMetadataSync(ticker, metadataSyncedOn);
+  await repo.recordPriceSync(ticker, lastDate);
+  await repo.setInstrumentState(ticker, "ready");
 };
 
 describe("runDaily — incremental refresh (MVP §7 step 1)", () => {
   it("fetches only the missing recent days for a ready instrument", async () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.refreshed).toEqual(["ACME"]);
     expect(report.metadataRefreshed).toEqual([]);
     // Exactly one provider call: the incremental window, cursor = latest+1.
     expect(calls).toEqual([`closes:ACME:${addDays(TODAY, -2)}:${TODAY}`]);
-    expect(deps.repo.latestClose("ACME")?.date).toBe(TODAY);
-    expect(deps.repo.getInstrument("ACME")?.lastPriceSync).toBe(TODAY);
+    expect((await deps.repo.latestClose("ACME"))?.date).toBe(TODAY);
+    expect((await deps.repo.getInstrument("ACME"))?.lastPriceSync).toBe(TODAY);
   });
 
   it("a same-day second run makes no provider calls (dedupe by lastPriceSync)", async () => {
@@ -136,8 +137,8 @@ describe("runDaily — incremental refresh (MVP §7 step 1)", () => {
     const deps = makeDeps(provider);
     // Prices only current through yesterday (e.g. weekend: today's close
     // does not exist), but a successful run already stamped today.
-    seedReady(deps.repo, "ACME", addDays(TODAY, -1), TODAY);
-    deps.repo.recordPriceSync("ACME", TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -1), TODAY);
+    await deps.repo.recordPriceSync("ACME", TODAY);
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.refreshed).toEqual(["ACME"]);
@@ -147,13 +148,13 @@ describe("runDaily — incremental refresh (MVP §7 step 1)", () => {
   it("weekend/holiday windows are harmless no-ops", async () => {
     const { provider } = makeFake({ emptyCloses: true });
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", addDays(TODAY, -2), TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -2), TODAY);
 
-    const before = deps.repo.getCloses("ACME");
+    const before = await deps.repo.getCloses("ACME");
     const report = await runDaily(deps, ["ACME"]);
     expect(report.refreshed).toEqual(["ACME"]);
     expect(report.failures).toEqual([]);
-    expect(deps.repo.getCloses("ACME")).toEqual(before);
+    expect(await deps.repo.getCloses("ACME")).toEqual(before);
   });
 });
 
@@ -162,11 +163,13 @@ describe("runDaily — metadata TTL (MVP §7 step 1)", () => {
     const { provider } = makeFake();
     const deps = makeDeps(provider);
     // Synced yesterday; TTL is 7 days.
-    seedReady(deps.repo, "ACME", addDays(TODAY, -1), addDays(TODAY, -1));
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -1), addDays(TODAY, -1));
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.metadataRefreshed).toEqual([]);
-    expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(110);
+    expect((await deps.repo.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(
+      110,
+    );
   });
 
   it("refreshes metadata as a NEW snapshot row once the TTL elapses", async () => {
@@ -176,16 +179,21 @@ describe("runDaily — metadata TTL (MVP §7 step 1)", () => {
       TODAY,
       -deps.config.ingestion.metadataTtlDays,
     );
-    seedReady(deps.repo, "ACME", addDays(TODAY, -1), syncedLongAgo);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -1), syncedLongAgo);
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.metadataRefreshed).toEqual(["ACME"]);
     // New snapshot appended; the old one remains readable as-of its date.
-    expect(deps.repo.latestAnalystSnapshot("ACME")?.medianTarget).toBe(121);
+    expect((await deps.repo.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(
+      121,
+    );
     expect(
-      deps.repo.latestAnalystSnapshot("ACME", syncedLongAgo)?.medianTarget,
+      (await deps.repo.latestAnalystSnapshot("ACME", syncedLongAgo))
+        ?.medianTarget,
     ).toBe(110);
-    expect(deps.repo.getInstrument("ACME")?.lastMetadataSync).toBe(TODAY);
+    expect((await deps.repo.getInstrument("ACME"))?.lastMetadataSync).toBe(
+      TODAY,
+    );
   });
 });
 
@@ -195,7 +203,7 @@ describe("runDaily — one throttled run across both phases (MVP §7 step 3)", (
     const deps = makeDeps(provider);
     // One ready instrument (1 price call) + one brand-new instrument
     // (1 price call + 3 metadata calls) in the same run.
-    seedReady(deps.repo, "OLD", addDays(TODAY, -3), TODAY);
+    await seedReady(deps.repo, "OLD", addDays(TODAY, -3), TODAY);
 
     const report = await runDaily(deps, ["OLD", "NEW"]);
     expect(report.refreshed).toEqual(["OLD"]);
@@ -214,15 +222,15 @@ describe("runDaily — failure accounting on ready instruments", () => {
     const failing = new Set(["ACME"]);
     const { provider } = makeFake({ failing });
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
 
     await runDaily(deps, ["ACME"]);
     await runDaily(deps, ["ACME"]);
-    expect(deps.repo.getInstrument("ACME")?.state).toBe("ready");
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("ready");
 
     const report = await runDaily(deps, ["ACME"]);
     expect(report.errored).toEqual(["ACME"]);
-    expect(deps.repo.getInstrument("ACME")?.state).toBe("error");
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("error");
 
     const quiet = await runDaily(deps, ["ACME"]);
     expect(quiet.refreshed).toEqual([]);
@@ -233,7 +241,7 @@ describe("runDaily — failure accounting on ready instruments", () => {
     const failing = new Set(["ACME"]);
     const { provider } = makeFake({ failing });
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
 
     await runDaily(deps, ["ACME"]);
     await runDaily(deps, ["ACME"]);
@@ -250,7 +258,7 @@ describe("runDaily — failure accounting on ready instruments", () => {
       TODAY,
       -deps.config.ingestion.metadataTtlDays,
     );
-    seedReady(deps.repo, "ACME", addDays(TODAY, -3), syncedLongAgo);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), syncedLongAgo);
 
     const report = await runDaily(deps, ["ACME"]);
     // Prices WERE stored: the report must say so, alongside the failure.
@@ -258,17 +266,19 @@ describe("runDaily — failure accounting on ready instruments", () => {
     expect(report.failures).toEqual([
       { ticker: "ACME", message: "analyst endpoint down for ACME" },
     ]);
-    expect(deps.repo.latestClose("ACME")?.date).toBe(TODAY);
+    expect((await deps.repo.latestClose("ACME"))?.date).toBe(TODAY);
     // The streak accumulates (no reset-after-prices), so a permanently
     // broken metadata endpoint eventually demotes per MVP §7.
-    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(1);
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      1,
+    );
   });
 
   it("fails loudly when a ready instrument has no stored history (invariant)", async () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
-    deps.repo.addInstrument("GHOST", "2026-01-01");
-    deps.repo.setInstrumentState("GHOST", "ready");
+    await deps.repo.addInstrument("GHOST", "2026-01-01");
+    await deps.repo.setInstrumentState("GHOST", "ready");
 
     await expect(runDaily(deps, ["GHOST"])).rejects.toThrow(
       /Invariant violated: ready instrument GHOST has no stored close/,
@@ -280,12 +290,16 @@ describe("runDaily — failure accounting on ready instruments", () => {
     const failing = new Set(["ACME"]);
     const { provider } = makeFake({ failing });
     const deps = makeDeps(provider);
-    seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY);
 
     await runDaily(deps, ["ACME"]);
-    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(1);
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      1,
+    );
     failing.delete("ACME");
     await runDaily(deps, ["ACME"]);
-    expect(deps.repo.getInstrument("ACME")?.consecutiveFailures).toBe(0);
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      0,
+    );
   });
 });
