@@ -1,15 +1,10 @@
 import type { KestrelConfig } from "@kestrel/core/config";
 import type { StorageRepository } from "@kestrel/core/storage/port";
-import type { Instrument, IsoDate } from "@kestrel/core/types";
+import type { IsoDate } from "@kestrel/core/types";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { chargeProviderFailure } from "./failures.js";
 import { promoteWhenCovered, startBackfill } from "./lifecycle.js";
-import {
-  type FetchCloses,
-  type FetchInstrumentInfo,
-  syncInstrumentCurrency,
-  syncPrices,
-} from "./prices.js";
+import { syncInstrumentCurrency, syncPrices } from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
 import { makeThrottle, type Throttle } from "./throttle.js";
 import {
@@ -111,10 +106,27 @@ export async function runBackfill(
       await repo.setInstrumentState(ticker, state);
     }
     try {
-      await backfillOne(deps, fetchCloses, fetchInfo, throttle, instrument);
-      await repo.resetFailures(ticker);
+      // Prices first — the ONLY step that gates coverage and promotion.
+      await syncPrices(
+        repo,
+        fetchCloses,
+        throttle,
+        ticker,
+        today,
+        config.ingestion.backfillLookbackDays,
+      );
       report.processed.push(ticker);
 
+      // Initial metadata snapshots on first bring-up GATE promotion — a
+      // `ready` instrument should already carry its screening inputs (analyst
+      // targets, event dates); the TTL refresh cadence is the daily runner's
+      // job. A failure here lands in the catch and blocks promotion this run.
+      if (instrument.lastMetadataSync === null) {
+        await fetchMetadataSnapshots(registry, throttle, repo, ticker, today);
+      }
+
+      // Promotion depends on stored price coverage plus initial metadata
+      // above (CONSTITUTION.md: `ready` = history covers lookbackTradingDays).
       const covered = (
         await repo.lastNCloses(
           ticker,
@@ -131,6 +143,19 @@ export async function runBackfill(
         await repo.setInstrumentState(ticker, next);
         report.promoted.push(ticker);
       }
+
+      // Currency is a presentation label, NOT a readiness criterion (a ready
+      // instrument with currency == null renders "?"), so it copies best-
+      // effort AFTER promotion — a flaky currency surface must never strand a
+      // price-complete instrument short of `ready`. Copy-once (ADR-0012
+      // decision 3); a failure still charges the streak via the catch, but
+      // the promotion above stands. The daily runner retries it.
+      if (fetchInfo !== undefined && instrument.currency === null) {
+        await syncInstrumentCurrency(repo, fetchInfo, throttle, ticker);
+      }
+      // Reset only when the WHOLE body succeeded — a currency failure lands
+      // in the catch and keeps the streak.
+      await repo.resetFailures(ticker);
     } catch (error) {
       const charged = await chargeProviderFailure(
         repo,
@@ -147,36 +172,4 @@ export async function runBackfill(
   }
 
   return report;
-}
-
-async function backfillOne(
-  deps: BackfillDeps,
-  fetchCloses: FetchCloses,
-  fetchInfo: FetchInstrumentInfo | undefined,
-  throttle: Throttle,
-  instrument: Instrument,
-): Promise<void> {
-  const { repo, registry, config, today } = deps;
-  const { ticker } = instrument;
-
-  await syncPrices(
-    repo,
-    fetchCloses,
-    throttle,
-    ticker,
-    today,
-    config.ingestion.backfillLookbackDays,
-  );
-
-  // Copy the native currency on first sync only — never recomputed, never
-  // refetched once known (ADR-0012 decision 3).
-  if (fetchInfo !== undefined && instrument.currency === null) {
-    await syncInstrumentCurrency(repo, fetchInfo, throttle, ticker);
-  }
-
-  // Initial metadata snapshots on first bring-up only; the TTL refresh
-  // cadence is the daily runner's job (item 013).
-  if (instrument.lastMetadataSync === null) {
-    await fetchMetadataSnapshots(registry, throttle, repo, ticker, today);
-  }
 }

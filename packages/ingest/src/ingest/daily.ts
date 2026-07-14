@@ -111,15 +111,19 @@ export async function runDaily(
           config.ingestion.backfillLookbackDays,
         );
       }
+      // Prices are stored at this point: report it even if the metadata /
+      // currency fetches below fail — the report must not claim prices were
+      // not updated, and a non-price surface must not un-report a healthy
+      // price refresh (it may still charge the streak in the catch).
+      report.refreshed.push(ticker);
       // Copy the native currency if it was never captured (e.g. an
       // instrument promoted before the currency surface existed) — first
-      // sync only, never refetched once known (ADR-0012 decision 3).
+      // sync only, never refetched once known (ADR-0012 decision 3). A
+      // metadata-class fetch: a `ready` instrument with currency == null is
+      // valid, so this never blocks the price refresh above.
       if (fetchInfo !== undefined && instrument.currency === null) {
         await syncInstrumentCurrency(repo, fetchInfo, throttle, ticker);
       }
-      // Prices are stored at this point: report it even if metadata below
-      // fails — the report must not claim prices were not updated.
-      report.refreshed.push(ticker);
       if (
         metadataDue(
           instrument.lastMetadataSync,

@@ -21,7 +21,7 @@ A user-defined watchlist of tickers, and the `pending → backfilling → ready`
 - **Sticky `error`:** an instrument marked `error` is excluded from syncing and never auto-recovers; recovery is a manual intervention. MVP §7 is silent on recovery — item 012 owns the wiring (increment-on-failure, reset-on-success) and should revisit whether/when `error` instruments get retried, since a multi-day provider outage could otherwise freeze instruments on stale data.
 - **`ingestion.maxConsecutiveFailures` (default 3):** the key is mandated by "threshold explicit, not magic"; the default value 3 was **signed off by the owner on 2026-07-14** (ADR-0012) — no longer provisional.
 - **Ordering:** items 012/013 must call `registerWatchlist` before `syncableInstruments`; the latter fails loudly on listed-but-unregistered tickers.
-- **Sequencing note:** this item (M4) was taken ahead of item 010 (M3), which is blocked on its two recorded open questions — a deliberate deviation from the README's top-to-bottom order.
+- **Sequencing note:** this item (M4) was taken ahead of item 010 (M3), which was then blocked on its three recorded open questions — a deliberate deviation from the README's top-to-bottom order. Item 010 has since shipped (its questions and this item's `maxConsecutiveFailures` default were signed off 2026-07-14, ADR-0012).
 
 ## Acceptance criteria
 

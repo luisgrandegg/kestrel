@@ -254,9 +254,10 @@ describe("runDaily — instrument currency (ADR-0012 decision 3)", () => {
     expect(report.failures).toEqual([
       { ticker: "ACME", message: "currency endpoint down for ACME" },
     ]);
-    // Prices landed before the currency step, but the whole body did not
-    // succeed, so refreshed is NOT reported and the streak advances.
-    expect(report.refreshed).toEqual([]);
+    // Prices landed and ARE reported refreshed — a non-price currency failure
+    // must not un-report a healthy price refresh (it still charges the streak
+    // and skips resetFailures, so the failure is not lost).
+    expect(report.refreshed).toEqual(["ACME"]);
     expect((await deps.repo.getInstrument("ACME"))?.currency).toBeNull();
     expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
       1,

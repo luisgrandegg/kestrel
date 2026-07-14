@@ -295,6 +295,25 @@ describe("runBackfill — resumability (guardrail 7)", () => {
     );
   });
 
+  it("promotes a price-complete instrument even when the currency fetch fails", async () => {
+    // Currency is a presentation label, not a readiness criterion: a flaky
+    // currency surface must never strand an otherwise-complete instrument in
+    // `backfilling` (which would drift it to sticky error). The failure is
+    // still charged to the streak (ADR-0012 decision 3).
+    const { provider } = makeFake({ currencyFailing: new Set(["ACME"]) });
+    const deps = makeDeps(provider);
+
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.promoted).toEqual(["ACME"]);
+    expect(report.failures).toEqual([
+      { ticker: "ACME", message: "currency endpoint down for ACME" },
+    ]);
+    const instrument = await deps.repo.getInstrument("ACME");
+    expect(instrument?.state).toBe("ready"); // promoted despite the failure
+    expect(instrument?.currency).toBeNull(); // still unstamped, retried by daily
+    expect(instrument?.consecutiveFailures).toBe(1); // charged
+  });
+
   it("a failure on one instrument does not abort the rest of the run", async () => {
     const { provider } = makeFake({ failing: new Set(["BAD"]) });
     const deps = makeDeps(provider);

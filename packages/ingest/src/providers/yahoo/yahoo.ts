@@ -73,7 +73,7 @@ interface YahooClient {
   chart(
     symbol: string,
     opts: {
-      period1: IsoDate;
+      period1: Date;
       period2: Date;
       interval: "1d";
       return: "array";
@@ -108,10 +108,21 @@ function exchangeLocalDate(instant: Date, timeZone: string): IsoDate {
   }).format(instant);
 }
 
-/** The instant one UTC day after an ISO date — Yahoo's chart `period2` is
- * exclusive of its own day, so pad by one to include the `to`-date bar. */
+/**
+ * Yahoo parses `period1`/`period2` as UTC instants, but a bar's calendar
+ * date is the EXCHANGE-local day — so for an exchange east/west of UTC the
+ * two windows are skewed by up to a day. Pad BOTH bounds by a UTC day (each
+ * direction) so no requested exchange-local day is filtered out by Yahoo's
+ * UTC bound; the exchange-local window filter in getCloses then drops the
+ * genuinely out-of-window bars the pad admits. Padding only period2 (as an
+ * earlier version did) loses the oldest requested day for far-east listings,
+ * leaving a permanent hole in append-only storage.
+ */
 function nextUtcDay(date: IsoDate): Date {
   return new Date(Date.parse(`${date}T00:00:00Z`) + 86_400_000);
+}
+function prevUtcDay(date: IsoDate): Date {
+  return new Date(Date.parse(`${date}T00:00:00Z`) - 86_400_000);
 }
 
 /**
@@ -152,7 +163,7 @@ export class YahooProvider implements Provider {
     to: IsoDate,
   ): Promise<DailyClose[]> {
     const result = await yf.chart(ticker, {
-      period1: from,
+      period1: prevUtcDay(from),
       period2: nextUtcDay(to),
       interval: "1d",
       return: "array",
@@ -182,23 +193,29 @@ export class YahooProvider implements Provider {
       }
       const date = exchangeLocalDate(bar.date, timeZone);
       assertIsoDate(`close date for ${ticker}`, date);
+      // Outside the requested inclusive window FIRST — the UTC-day pads on
+      // period1/period2 admit adjacent-day bars, and for an exchange ahead
+      // of UTC the live session can carry an exchange-local date of to+1
+      // while the run's UTC `today` is still `to`. Such a bar is legitimately
+      // excluded, NOT a future-dated failure — dropping it before the
+      // future check keeps far-east tickers from throwing every run.
+      if (date < from || date > to) {
+        continue;
+      }
       if (!Number.isFinite(bar.close) || bar.close <= 0) {
         throw malformed(
           ticker,
           `non-positive or non-finite close ${bar.close} on ${date}`,
         );
       }
-      // No metric may ever see a close dated after the run date.
+      // Backstop for a caller requesting `to` beyond the run date: no metric
+      // may ever see a close dated after today. In the normal daily path
+      // (to == today) the window filter above already excludes these.
       if (date > today) {
         throw malformed(
           ticker,
           `future-dated close ${date} is after today ${today}`,
         );
-      }
-      // Outside the requested inclusive window (e.g. the one-day period2 pad)
-      // — legitimately excluded, not a failure.
-      if (date < from || date > to) {
-        continue;
       }
       closes.push({ ticker, date, close: bar.close });
     }
@@ -234,29 +251,32 @@ export class YahooProvider implements Provider {
       typeof rawTarget === "number" &&
       Number.isFinite(rawTarget) &&
       rawTarget > 0;
-    const noCoverage =
-      rawCount === undefined || rawCount === null || rawCount === 0;
-    if (!targetUsable) {
-      // ADR-0012 decision 2: Yahoo CLEARLY reports no coverage — no snapshot
-      // (ingestion still stamps the metadata sync so it isn't refetched).
-      if (noCoverage) {
-        return null;
-      }
-      // Coverage reported but no usable target: malformed — fail loud.
-      throw malformed(
+    // A coherent snapshot needs BOTH a usable target and at least one
+    // analyst — a "median target with zero analysts" is meaningless.
+    const hasCoverage = typeof rawCount === "number" && rawCount >= 1;
+    if (hasCoverage && targetUsable) {
+      assertIntegerAtLeast(`numAnalysts for ${ticker}`, rawCount, 1);
+      assertPositiveFinite(`medianTarget for ${ticker}`, rawTarget);
+      return {
         ticker,
-        `reports ${rawCount} analyst opinions but no usable median target (${rawTarget})`,
-      );
+        asOf: this.today(),
+        medianTarget: rawTarget,
+        numAnalysts: rawCount,
+      };
     }
-    const count = rawCount ?? 0;
-    assertIntegerAtLeast(`numAnalysts for ${ticker}`, count, 0);
-    assertPositiveFinite(`medianTarget for ${ticker}`, rawTarget);
-    return {
+    // ADR-0012 decision 2: no usable analyst reading (no coverage reported,
+    // or a target with no analyst count behind it) — return no snapshot.
+    // Ingestion still stamps the metadata sync, so this isn't refetched
+    // before its TTL and never error-loops.
+    if (!hasCoverage) {
+      return null;
+    }
+    // Coverage reported (>=1 analyst) but no usable target: malformed —
+    // fail loud at the adapter edge (guardrail 6).
+    throw malformed(
       ticker,
-      asOf: this.today(),
-      medianTarget: rawTarget,
-      numAnalysts: count,
-    };
+      `reports ${rawCount} analyst opinions but no usable median target (${rawTarget})`,
+    );
   }
 
   async getNextEarnings(ticker: string): Promise<EarningsSnapshot> {

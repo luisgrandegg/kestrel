@@ -124,16 +124,66 @@ describe("YahooProvider.getCloses", () => {
     expect(closes.map((c) => c.date)).toEqual(["2026-07-10", "2026-07-14"]);
   });
 
-  it("throws on a bar dated after the injected clock, naming the ticker", async () => {
+  it("drops an out-of-window far-east bar dated to+1 (does NOT throw future-dated)", async () => {
+    // Auckland (UTC+12 in July): the session that opens 2026-07-14T22:00Z is
+    // exchange-local 2026-07-15 — one day AHEAD of the run's UTC `to`/today
+    // (2026-07-14). The +1-day period2 pad admits its instant, so it must be
+    // dropped as out-of-window, NOT thrown as future-dated (the bug that
+    // poisoned every east-of-UTC ticker on every run).
+    chart.mockResolvedValue(
+      chartResult(
+        [
+          bar("2026-07-13T22:00:00Z", 40), // Auckland 2026-07-14 — in window
+          bar("2026-07-14T22:00:00Z", 41), // Auckland 2026-07-15 — to+1, drop
+        ],
+        { exchangeTimezoneName: "Pacific/Auckland", currency: "NZD" },
+      ),
+    );
+    const closes = await provider.getCloses(
+      "AIR.NZ",
+      "2026-07-10",
+      "2026-07-14",
+    );
+    expect(closes).toEqual([
+      { ticker: "AIR.NZ", date: "2026-07-14", close: 40 },
+    ]);
+  });
+
+  it("keeps the from-day bar for a far-east exchange (period1 padded a UTC day)", async () => {
+    // Auckland from-day 2026-07-13 opens 2026-07-12T22:00Z — before period1's
+    // UTC midnight. The adapter pads period1 back a UTC day so Yahoo returns
+    // it, and the exchange-local window filter keeps it (date == from).
+    chart.mockResolvedValue(
+      chartResult([bar("2026-07-12T22:00:00Z", 40)], {
+        exchangeTimezoneName: "Pacific/Auckland",
+        currency: "NZD",
+      }),
+    );
+    const closes = await provider.getCloses(
+      "AIR.NZ",
+      "2026-07-13",
+      "2026-07-14",
+    );
+    expect(closes).toEqual([
+      { ticker: "AIR.NZ", date: "2026-07-13", close: 40 },
+    ]);
+    // The request itself pads period1 back one UTC day (2026-07-12), not `from`.
+    const opts = chart.mock.calls[0]?.[1] as { period1: Date };
+    expect(opts.period1.toISOString()).toBe("2026-07-12T00:00:00.000Z");
+  });
+
+  it("throws future-dated only as a backstop when the caller requests `to` beyond today", async () => {
+    // Normal runs pass to == today, so the window filter already excludes
+    // future bars; this guards the caller-bug path (to > today).
     chart.mockResolvedValue(
       chartResult([
         bar("2026-07-10T17:00:00Z", 110),
-        bar("2026-07-16T17:00:00Z", 120), // after TODAY (2026-07-14)
+        bar("2026-07-15T17:00:00Z", 120), // within [from, to] but after TODAY
       ]),
     );
     await expect(
-      provider.getCloses("ACME", "2026-07-10", "2026-07-14"),
-    ).rejects.toThrow(/ACME.*future-dated close 2026-07-16/);
+      provider.getCloses("ACME", "2026-07-10", "2026-07-16"),
+    ).rejects.toThrow(/ACME.*future-dated close 2026-07-15/);
   });
 
   it("throws on a non-positive close (append-only positivity contract)", async () => {
@@ -200,6 +250,15 @@ describe("YahooProvider.getAnalystTargets", () => {
 
     quoteSummary.mockResolvedValue({ financialData: {} }); // count + target absent
     expect(await provider.getAnalystTargets("NOCOV")).toBeNull();
+  });
+
+  it("returns null (not a numAnalysts:0 snapshot) when a target has no analyst count", async () => {
+    // A median target with no analyst count behind it is incoherent — treat
+    // it as no usable reading (null), never emit numAnalysts: 0.
+    quoteSummary.mockResolvedValue({
+      financialData: { targetMedianPrice: 150 }, // count absent
+    });
+    expect(await provider.getAnalystTargets("ACME")).toBeNull();
   });
 
   it("throws when coverage is reported but the target is missing (malformed)", async () => {
