@@ -136,12 +136,12 @@ describe("resolveConfig", () => {
       /targetStatistic must be "median"/,
     );
     // Session windows: positive whole hours, sliding never exceeding absolute.
-    expect(() =>
-      resolveConfig({ auth: { sessionAbsoluteHours: 0 } }),
-    ).toThrow(/"auth.sessionAbsoluteHours" must be a positive integer/);
-    expect(() =>
-      resolveConfig({ auth: { sessionSlidingHours: 1.5 } }),
-    ).toThrow(/"auth.sessionSlidingHours" must be a positive integer/);
+    expect(() => resolveConfig({ auth: { sessionAbsoluteHours: 0 } })).toThrow(
+      /"auth.sessionAbsoluteHours" must be a positive integer/,
+    );
+    expect(() => resolveConfig({ auth: { sessionSlidingHours: 1.5 } })).toThrow(
+      /"auth.sessionSlidingHours" must be a positive integer/,
+    );
     expect(() =>
       resolveConfig({
         auth: { sessionAbsoluteHours: 100, sessionSlidingHours: 200 },

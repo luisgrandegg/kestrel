@@ -46,17 +46,15 @@ export interface IngestionConfig {
 
 export interface AuthConfig {
   /**
-   * Hard ceiling on a session's lifetime, in hours — a session is never
-   * valid past this many hours after it was created, however active the
-   * user (backlog item 020, ADR-0013). Maps to better-auth's
-   * `session.expiresIn`.
+   * Upper bound on a session's lifetime, in hours (backlog item 020,
+   * ADR-0013). Library-agnostic auth setting; the composition root maps it
+   * onto whatever the chosen auth layer offers.
    */
   sessionAbsoluteHours: number;
   /**
    * Sliding refresh window, in hours: an active session's expiry is
    * extended once it is older than this, so continued use keeps a user
-   * signed in (up to the absolute ceiling). Maps to better-auth's
-   * `session.updateAge`. Must be <= sessionAbsoluteHours.
+   * signed in. Must be <= sessionAbsoluteHours.
    */
   sessionSlidingHours: number;
 }

@@ -1,18 +1,22 @@
 # Deploying Kestrel (Vercel + Supabase)
 
-The hosted deployment per [ADR-0011](adr/0011-vercel-supabase-deployment.md):
-the Next.js dashboard (`apps/web`) on Vercel, reading Supabase Postgres
-through the storage seam, with the ingest worker (`packages/ingest`) run by
-the app itself via a Vercel-Cron-invoked route (`/api/ingest`).
+The hosted deployment per [ADR-0011](adr/0011-vercel-supabase-deployment.md)
+and [ADR-0013](adr/0013-users-auth-and-multi-user.md): the Next.js dashboard
+(`apps/web`) on Vercel, reading Supabase Postgres through the storage seam,
+with the ingest worker (`packages/ingest`) run by the app itself via a
+Vercel-Cron-invoked route (`/api/ingest`). The dashboard is private —
+sign-in is via better-auth with Google (item 020).
 
 ## 1. Create the Supabase project
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Apply the schema in `supabase/migrations/00001_init.sql`:
-   - **SQL editor:** paste the file's contents into the Supabase dashboard's
-     SQL editor and run it; or
+2. Apply the migrations in `supabase/migrations/` — `00001_init.sql` (market
+   data) and `00002_auth.sql` (better-auth's `user`/`session`/`account`/
+   `verification` tables, item 020), in order:
+   - **SQL editor:** paste each file's contents into the Supabase dashboard's
+     SQL editor and run them in filename order; or
    - **supabase CLI:** link the repo (`supabase link --project-ref <ref>`)
-     and run `supabase db push` (the migration lives in the conventional
+     and run `supabase db push` (both migrations live in the conventional
      `supabase/migrations/` directory).
 3. Copy the **Transaction pooler** connection string (Project settings →
    Database → Connection string → Transaction pooler, port 6543) and
@@ -48,9 +52,12 @@ Set these on the Vercel project (Production):
 
 | Variable | Required | Value |
 |---|---|---|
-| `DATABASE_URL` | yes | The Supabase **Transaction pooler** connection string from step 1. Read lazily on first query — `next build` does not need it. |
-| `CRON_SECRET` | yes | A long random string (e.g. `openssl rand -hex 32`). Vercel Cron automatically sends it as `Authorization: Bearer $CRON_SECRET`; the ingest route rejects everything else (401) and refuses to run at all if unset (500, never an open route). |
-| `KESTREL_CONFIG` | no | JSON object of config overrides, e.g. `{"minAnalysts": 7, "screens": {"category1": {"upsideThreshold": 0.4}}}`. There is no repo-root cwd on Vercel, so `kestrel.config.json` does not apply to the web app — this env var is the override path. Absent means the MVP.md §9 defaults; invalid JSON or unknown keys fail loud. |
+| `DATABASE_URL` | yes | The Supabase **Transaction pooler** connection string from step 1. Read lazily on first query — `next build` does not need it. Used by both the storage seam and better-auth (each opens its own pool). |
+| `CRON_SECRET` | yes | A long random string (e.g. `openssl rand -hex 32`). Vercel Cron automatically sends it as `Authorization: Bearer $CRON_SECRET`; the ingest route rejects everything else (401) and refuses to run at all if unset (500, never an open route). This is machine auth for `/api/ingest` only — it is NOT the user sign-in. |
+| `BETTER_AUTH_SECRET` | yes | A long random string (e.g. `openssl rand -base64 32`) — better-auth uses it to sign/encrypt session cookies (item 020). better-auth throws in production if unset, so a deploy without it fails loud on first auth request. |
+| `BETTER_AUTH_URL` | yes | The app's public origin, e.g. `https://<your-app>.vercel.app` — better-auth builds OAuth redirect URLs from it. A wrong/missing value causes Google `redirect_uri_mismatch`. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | no | Google OAuth credentials (Google Cloud Console → Credentials → OAuth client, type Web application). Authorized redirect URI: `https://<your-app>.vercel.app/api/auth/callback/google`. When BOTH are set, Google sign-in is offered; when absent, the sign-in page honestly says no method is configured (item 020) — the app still builds and runs. |
+| `KESTREL_CONFIG` | no | JSON object of config overrides, e.g. `{"minAnalysts": 7, "screens": {"category1": {"upsideThreshold": 0.4}}}`. There is no repo-root cwd on Vercel, so `kestrel.config.json` does not apply to the web app — this env var is the override path. Absent means the MVP.md §9 defaults; invalid JSON or unknown keys fail loud. Session durations (`auth.sessionAbsoluteHours`/`auth.sessionSlidingHours`) are overridable here too. |
 
 ## 4. Verify the cron
 
@@ -106,3 +113,26 @@ the edit to the connected branch triggers that deploy automatically; a
 rollback or skipped build keeps serving the old list. (Backlog item 021
 retires the bundled file, moving the watchlist behind the storage seam as
 per-user rows queried live.)
+
+## 6. Authentication (Google sign-in)
+
+The dashboard is private (item 020, ADR-0013): an unauthenticated request
+redirects to `/sign-in`. Sign-in is handled by **better-auth**, mounted at
+`/api/auth/*`, with its own `user`/`session`/`account`/`verification` tables
+(migration `00002_auth.sql`).
+
+1. In **Google Cloud Console → APIs & Services → Credentials**, create an
+   OAuth client (type *Web application*). Add the authorized redirect URI
+   `https://<your-app>.vercel.app/api/auth/callback/google` and, for local
+   dev, `http://localhost:3000/api/auth/callback/google`.
+2. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BETTER_AUTH_SECRET`, and
+   `BETTER_AUTH_URL` (§3). With the Google vars set, the sign-in page offers
+   Google; without them it states honestly that no method is configured —
+   the app still runs (guardrail-4-style honest degradation).
+3. First sign-in **auto-creates** the user; a later Google identity whose
+   verified email matches an existing user **links** to it. Signup is open
+   (no allowlist) — with per-user data (item 021) a stranger only ever sees
+   their own empty dashboard.
+
+`/api/ingest` is unaffected — it stays machine-authenticated with
+`CRON_SECRET`, never session-gated.

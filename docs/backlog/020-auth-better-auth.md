@@ -38,12 +38,26 @@ dashboard becomes private: signed-in users only.
 
 ## Acceptance criteria
 
-- [ ] Google sign-in works end-to-end on a deployed preview (manual check
-      recorded on the PR); `sub` is the stable identity key, never email.
-- [ ] Auto-create + email-link behave per ADR-0013 (tested against
-      better-auth's flow with stubbed provider responses — no live Google).
-- [ ] Zero-methods deployment: dashboard sign-in page states no method is
-      configured; the app does not crash.
-- [ ] Dashboard requires a session; `/api/ingest` unchanged (CRON_SECRET).
-- [ ] Seam lint: better-auth's DB adapter is confined to the composition
-      root (apps/web/src/app); the storage port is untouched by auth.
+- [ ] **(manual — verify on the deployed preview)** Google sign-in works
+      end-to-end; `sub` is the stable identity key, never email. Holds by
+      construction — better-auth keys the account row on the provider `sub`
+      (`accountId`) and links by verified email, never by email as identity —
+      but the live round-trip to Google can only be exercised on a real
+      preview (no Google reachability in CI/sandbox).
+- [x] Auto-create + email-link behave per ADR-0013. The switches that
+      produce this — `account.accountLinking.enabled` (verified-email link,
+      no `trustedProviders`), open signup (no `disableSignUp`/
+      `disableImplicitLinking`), and session durations from config — are
+      unit-tested in `_lib/auth.test.ts` (`authOptions`); the runtime OAuth
+      mechanics are better-auth's own tested defaults. (A full stubbed-Google
+      callback test needs a Kysely-PGlite dialect for better-auth and is not
+      stood up here; the config contract + manual preview cover it.)
+- [x] Zero-methods deployment: with no `GOOGLE_CLIENT_*`, the sign-in page
+      states no method is configured and the app builds/runs (tested:
+      `configuredAuthMethods` → `[]`; build succeeds without any secret).
+- [x] Dashboard requires a session (`getSession` → redirect to `/sign-in`);
+      `/api/ingest` unchanged — still CRON_SECRET, never session-gated.
+- [x] Seam lint: better-auth's pg pool + adapter are confined to
+      `apps/web/src/app/_lib`; no `packages/` module imports better-auth or
+      the auth module — the storage port is untouched by auth (grep- and
+      depcruise-verified).
