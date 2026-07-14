@@ -121,9 +121,10 @@ packages/
       config/      §9 defaults + validated overrides
       types/       shared DTOs, guards — the pure leaf every layer may import
       metrics/     impliedUpside, completedFluctuations, daysToEvent (pure)
-      storage/     the seam contract (port) + SQLite repository — the only
-                   code that touches the database; consumers type against
-                   the port
+      storage/     the seam contract (port) + repositories for both engines
+                   (SQLite; Postgres/Supabase per ADR-0011, via a driverless
+                   SQL-executor seam) — the only code that touches the
+                   database; consumers type against the port
       screens/     the three category predicates + shared base predicate
       test-support/  test-only fixtures (outside the seam graph)
   ingest/          @kestrel/ingest — the worker library (depends on core)
@@ -138,6 +139,9 @@ apps/
     src/
       app/         harness, pipeline, CLI entrypoint
       ui/          dashboard renderer (pure text)
+supabase/
+  migrations/ Postgres schema — the SQL twin of storage/schema.ts; the
+              repository contract tests run against both engines
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)

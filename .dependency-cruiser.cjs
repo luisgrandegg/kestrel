@@ -39,15 +39,15 @@ module.exports = {
       name: "port-not-driver",
       comment:
         "Consumers depend on the storage seam contract (storage/port), " +
-        "never a concrete driver: only storage/ itself and the composition " +
-        "root (apps/cli's app/, which constructs one) may import the " +
-        "repository module.",
+        "never a concrete engine: only storage/ itself and the composition " +
+        "root (apps/cli's app/, which constructs one) may import a " +
+        "repository module (SQLite or Postgres).",
       severity: "error",
       from: {
         path: "^(packages|apps)/",
         pathNot: "^(packages/core/src/storage|apps/cli/src/app)/",
       },
-      to: { path: "^packages/core/src/storage/repository" },
+      to: { path: "^packages/core/src/storage/(repository|postgres)" },
     },
     {
       name: "only-storage-touches-sqlite",
