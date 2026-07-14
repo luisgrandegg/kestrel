@@ -8,7 +8,8 @@
     "./*": "./src/*.ts"
   },
   "dependencies": {
-    "@kestrel/core": "workspace:*"
+    "@kestrel/core": "workspace:*",
+    "yahoo-finance2": "^2.14.2"
   },
   "scripts": {
     "test": "vitest run",

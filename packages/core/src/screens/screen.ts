@@ -30,8 +30,9 @@ export interface InstrumentSnapshot {
   ticker: string;
   /**
    * Native currency — the instrument's CURRENT metadata column, not an
-   * as-of-bounded observation (null until a provider reports it; open
-   * question 3 on item 010). Historical evaluations see today's value.
+   * as-of-bounded observation (null until a provider reports it; ingestion
+   * copies it from the closes provider's getInstrumentInfo, ADR-0012).
+   * Historical evaluations see today's value.
    */
   currency: string | null;
   /** The evaluation's as-of date — no data newer than this is present. */

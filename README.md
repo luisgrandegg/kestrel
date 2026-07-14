@@ -48,20 +48,23 @@ dependency-ordered items in [`docs/backlog/`](docs/backlog/).
 
 ## Status
 
-Every backlog item except the Yahoo adapter (010) is built and tested:
-config, shared types, seam lint, all three metrics (implied upside;
-completed-fluctuations ZigZag with pinned acceptance tests; event
-proximity), append-only storage (SQLite and Supabase Postgres behind one
-seam, one contract suite), provider registry, throttled
-idempotent ingestion with a `pending → backfilling → ready` lifecycle, all
-three screens, the dashboard renderer, and the scheduled GitHub Action.
-M3 and M7 remain partially open exactly where they depend on that adapter.
+The MVP is feature-complete: config, shared types, seam lint, all three
+metrics (implied upside; completed-fluctuations ZigZag with pinned acceptance
+tests; event proximity), append-only storage (SQLite and Supabase Postgres
+behind one seam, one contract suite), provider registry, throttled idempotent
+ingestion with a `pending → backfilling → ready` lifecycle, all three screens,
+the dashboard renderer, the scheduled GitHub Action, and the Yahoo Finance
+adapter (010) — which serves all four capabilities plus native currency.
 
-**Not yet live:** the Yahoo Finance adapter awaits three open questions
-recorded on backlog item 010 (plus one provisional default pending
-sign-off on item 011), so no real provider is registered yet — scheduled
-runs currently skip ingestion loudly and render every screen in its
-disabled state.
+**Live:** the Yahoo adapter is registered in
+`packages/ingest/src/providers/active.ts`, so scheduled runs ingest live
+market data and every screen is enabled. The three open questions on item 010
+and item 011's failure-threshold default were signed off on 2026-07-14
+(ADR-0012). Yahoo is unofficial and scraping-backed (ADR-0008): if it breaks,
+provider fetches fail loud and are charged to each instrument's failure streak
+(sticky `error` after the configured threshold) — never fabricated or stale
+data — and the fix is swapping the adapter behind the registry, not the
+screens.
 
 ## Getting started
 
@@ -69,7 +72,7 @@ Requires Node ≥ 22.13 and pnpm.
 
 ```sh
 pnpm install
-pnpm test        # 208 tests
+pnpm test        # 235 tests
 pnpm lint        # biome + dependency-cruiser seam rules
 pnpm typecheck
 pnpm daily       # build + run the daily pipeline locally

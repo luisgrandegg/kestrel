@@ -4,7 +4,12 @@ import type { Instrument, IsoDate } from "@kestrel/core/types";
 import type { ProviderRegistry } from "../providers/registry.js";
 import { chargeProviderFailure } from "./failures.js";
 import { promoteWhenCovered, startBackfill } from "./lifecycle.js";
-import { type FetchCloses, syncPrices } from "./prices.js";
+import {
+  type FetchCloses,
+  type FetchInstrumentInfo,
+  syncInstrumentCurrency,
+  syncPrices,
+} from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
 import { makeThrottle, type Throttle } from "./throttle.js";
 import {
@@ -76,6 +81,10 @@ export async function runBackfill(
     );
   }
   const fetchCloses = closesProvider.getCloses.bind(closesProvider);
+  // Currency travels with the closes capability (ADR-0012); a provider
+  // serving closes backs getInstrumentInfo (registry-enforced), but stay
+  // defensive so a missing surface degrades rather than crashes.
+  const fetchInfo = closesProvider.getInstrumentInfo?.bind(closesProvider);
   const throttle =
     deps.throttle ??
     makeThrottle(deps.sleep, config.ingestion.interCallDelayMs);
@@ -102,7 +111,7 @@ export async function runBackfill(
       await repo.setInstrumentState(ticker, state);
     }
     try {
-      await backfillOne(deps, fetchCloses, throttle, instrument);
+      await backfillOne(deps, fetchCloses, fetchInfo, throttle, instrument);
       await repo.resetFailures(ticker);
       report.processed.push(ticker);
 
@@ -143,6 +152,7 @@ export async function runBackfill(
 async function backfillOne(
   deps: BackfillDeps,
   fetchCloses: FetchCloses,
+  fetchInfo: FetchInstrumentInfo | undefined,
   throttle: Throttle,
   instrument: Instrument,
 ): Promise<void> {
@@ -157,6 +167,12 @@ async function backfillOne(
     today,
     config.ingestion.backfillLookbackDays,
   );
+
+  // Copy the native currency on first sync only — never recomputed, never
+  // refetched once known (ADR-0012 decision 3).
+  if (fetchInfo !== undefined && instrument.currency === null) {
+    await syncInstrumentCurrency(repo, fetchInfo, throttle, ticker);
+  }
 
   // Initial metadata snapshots on first bring-up only; the TTL refresh
   // cadence is the daily runner's job (item 013).

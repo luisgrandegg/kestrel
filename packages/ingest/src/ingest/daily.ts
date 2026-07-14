@@ -6,7 +6,7 @@ import {
 } from "./backfill.js";
 import { addDays } from "./dates.js";
 import { chargeProviderFailure } from "./failures.js";
-import { syncPrices } from "./prices.js";
+import { syncInstrumentCurrency, syncPrices } from "./prices.js";
 import { fetchMetadataSnapshots } from "./snapshots.js";
 import { makeThrottle } from "./throttle.js";
 import {
@@ -64,6 +64,8 @@ export async function runDaily(
     );
   }
   const fetchCloses = closesProvider.getCloses.bind(closesProvider);
+  // Currency travels with closes (ADR-0012); defensive-optional like backfill.
+  const fetchInfo = closesProvider.getInstrumentInfo?.bind(closesProvider);
   const throttle =
     deps.throttle ??
     makeThrottle(deps.sleep, config.ingestion.interCallDelayMs);
@@ -108,6 +110,12 @@ export async function runDaily(
           today,
           config.ingestion.backfillLookbackDays,
         );
+      }
+      // Copy the native currency if it was never captured (e.g. an
+      // instrument promoted before the currency surface existed) — first
+      // sync only, never refetched once known (ADR-0012 decision 3).
+      if (fetchInfo !== undefined && instrument.currency === null) {
+        await syncInstrumentCurrency(repo, fetchInfo, throttle, ticker);
       }
       // Prices are stored at this point: report it even if metadata below
       // fails — the report must not claim prices were not updated.

@@ -18,20 +18,22 @@ import { ProviderRegistry } from "./registry.js";
 
 const fetches = {
   getCloses: () => Promise.resolve([] as DailyClose[]),
+  getInstrumentInfo: () => Promise.resolve({ ticker: "X", currency: "USD" }),
   getAnalystTargets: () => Promise.resolve({} as AnalystSnapshot),
   getNextEarnings: () => Promise.resolve({} as EarningsSnapshot),
   getNextExDividend: () => Promise.resolve({} as DividendSnapshot),
 };
 
-/** A fake implementing exactly the methods its advertised capabilities require. */
+/** A fake implementing exactly the methods its advertised capabilities require
+ * (a capability may require several — e.g. `closes` needs getCloses AND
+ * getInstrumentInfo, ADR-0012). */
 const fake = (id: string, ...capabilities: Capability[]): Provider => ({
   id,
   capabilities: new Set(capabilities),
   ...Object.fromEntries(
-    capabilities.map((c) => [
-      CAPABILITY_METHODS[c],
-      fetches[CAPABILITY_METHODS[c]],
-    ]),
+    capabilities.flatMap((c) =>
+      CAPABILITY_METHODS[c].map((m) => [m, fetches[m]]),
+    ),
   ),
 });
 
@@ -103,6 +105,20 @@ describe("ProviderRegistry — fail-loud registration", () => {
     };
     expect(() => new ProviderRegistry([dishonest])).toThrow(
       /"dishonest" advertises "closes" but does not implement getCloses/,
+    );
+  });
+
+  it("rejects a closes provider missing the required currency surface (ADR-0012)", () => {
+    // `closes` requires BOTH getCloses and getInstrumentInfo: a provider that
+    // cannot report currency fails loud at registration, never silently.
+    const pricesOnly: Provider = {
+      id: "no-currency",
+      capabilities: new Set<Capability>(["closes"]),
+      getCloses: () => Promise.resolve([]),
+      // no getInstrumentInfo
+    };
+    expect(() => new ProviderRegistry([pricesOnly])).toThrow(
+      /"no-currency" advertises "closes" but does not implement getInstrumentInfo/,
     );
   });
 

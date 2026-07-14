@@ -26,10 +26,15 @@ export class ProviderRegistry {
       }
       seen.add(provider.id);
       for (const capability of provider.capabilities) {
-        if (typeof provider[CAPABILITY_METHODS[capability]] !== "function") {
-          throw new Error(
-            `Provider "${provider.id}" advertises "${capability}" but does not implement ${CAPABILITY_METHODS[capability]}()`,
-          );
+        // A capability may require several methods (e.g. `closes` needs both
+        // getCloses and getInstrumentInfo, ADR-0012); every one must be
+        // backed or registration fails loud.
+        for (const method of CAPABILITY_METHODS[capability]) {
+          if (typeof provider[method] !== "function") {
+            throw new Error(
+              `Provider "${provider.id}" advertises "${capability}" but does not implement ${method}()`,
+            );
+          }
         }
       }
     }

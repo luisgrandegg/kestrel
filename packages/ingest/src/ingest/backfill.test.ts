@@ -32,6 +32,8 @@ interface FakeOptions {
   wrongTicker?: boolean;
   /** Include one close dated after the requested `to`. */
   futureDated?: boolean;
+  /** Tickers whose getInstrumentInfo (currency) fetch should throw. */
+  currencyFailing?: Set<string>;
 }
 
 /** Fake provider serving synthetic calendar-daily closes. */
@@ -74,6 +76,16 @@ const makeFake = (options: FakeOptions = {}) => {
       return Promise.resolve(
         options.cap === undefined ? all : all.slice(0, options.cap),
       );
+    };
+    // Required alongside getCloses by the `closes` capability (ADR-0012).
+    provider.getInstrumentInfo = (ticker) => {
+      calls.push(`currency:${ticker}`);
+      if (options.currencyFailing?.has(ticker)) {
+        return Promise.reject(
+          new Error(`currency endpoint down for ${ticker}`),
+        );
+      }
+      return Promise.resolve({ ticker, currency: "USD" });
     };
   }
   if (capabilities.includes("analystTargets")) {
@@ -143,6 +155,8 @@ describe("runBackfill — happy path", () => {
     expect(instrument?.state).toBe("ready");
     expect(instrument?.lastPriceSync).toBe(TODAY);
     expect(instrument?.lastMetadataSync).toBe(TODAY);
+    // Native currency copied from the closes provider on first sync (ADR-0012).
+    expect(instrument?.currency).toBe("USD");
     expect((await deps.repo.getCloses("ACME")).length).toBeGreaterThan(63);
     expect((await deps.repo.latestAnalystSnapshot("ACME"))?.medianTarget).toBe(
       120,
@@ -159,9 +173,10 @@ describe("runBackfill — happy path", () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
     await runBackfill(deps, ["AAA", "BBB"]);
-    // 2 instruments × (1 closes + 3 metadata) = 8 calls, 7 sleeps between.
-    expect(calls).toHaveLength(8);
-    expect(deps.sleeps).toHaveLength(7);
+    // 2 instruments × (1 closes + 1 currency + 3 metadata) = 10 calls,
+    // 9 sleeps between (ADR-0012 adds the currency fetch on first sync).
+    expect(calls).toHaveLength(10);
+    expect(deps.sleeps).toHaveLength(9);
     expect(new Set(deps.sleeps)).toEqual(
       new Set([deps.config.ingestion.interCallDelayMs]),
     );
@@ -178,8 +193,9 @@ describe("runBackfill — happy path", () => {
     await shared(() => Promise.resolve());
     expect(deps.sleeps).toHaveLength(0);
     await runBackfill({ ...deps, throttle: shared }, ["ACME"]);
-    // 4 backfill calls, each preceded by a sleep because the throttle was warm.
-    expect(deps.sleeps).toHaveLength(4);
+    // 5 backfill calls (closes + currency + 3 metadata), each preceded by a
+    // sleep because the throttle was warm.
+    expect(deps.sleeps).toHaveLength(5);
   });
 
   it("re-running over a ready instrument adds nothing and calls no provider", async () => {
@@ -354,6 +370,54 @@ describe("runBackfill — provider data validation (append-only defense)", () =>
     expect(report.failures).toHaveLength(1);
     expect(report.failures[0]?.message).toMatch(/future-dated close/);
     expect(await deps.repo.getCloses("ACME")).toHaveLength(0);
+  });
+});
+
+describe("runBackfill — instrument currency (ADR-0012 decision 3)", () => {
+  it("copies the native currency from the closes provider on first sync", async () => {
+    const { provider, calls } = makeFake();
+    const deps = makeDeps(provider);
+    await runBackfill(deps, ["ACME"]);
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBe("USD");
+    // Exactly one currency fetch, and it went through the throttle.
+    expect(calls.filter((c) => c.startsWith("currency:"))).toEqual([
+      "currency:ACME",
+    ]);
+  });
+
+  it("does not refetch currency once it is known", async () => {
+    // A capped provider stays backfilling after run 1 (currency set there),
+    // so run 2 re-enters backfillOne but must not fetch currency again.
+    const { provider, calls } = makeFake({ cap: 40 });
+    const deps = makeDeps(provider);
+    await runBackfill(deps, ["ACME"]);
+    expect((await deps.repo.getInstrument("ACME"))?.state).toBe("backfilling");
+    const currencyCallsAfterFirst = calls.filter((c) =>
+      c.startsWith("currency:"),
+    ).length;
+    expect(currencyCallsAfterFirst).toBe(1);
+
+    await runBackfill(deps, ["ACME"]);
+    expect(calls.filter((c) => c.startsWith("currency:"))).toHaveLength(1);
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBe("USD");
+  });
+
+  it("charges a currency-fetch failure as a provider failure like any other", async () => {
+    const currencyFailing = new Set(["ACME"]);
+    const { provider } = makeFake({ currencyFailing });
+    const deps = makeDeps(provider);
+
+    const report = await runBackfill(deps, ["ACME"]);
+    expect(report.failures).toEqual([
+      { ticker: "ACME", message: "currency endpoint down for ACME" },
+    ]);
+    // Currency stays unset (copy only, never fabricated); the streak advances.
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBeNull();
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      1,
+    );
+    // Closes still landed before the currency step (append-only, kept).
+    expect((await deps.repo.getCloses("ACME")).length).toBeGreaterThan(0);
   });
 });
 

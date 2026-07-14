@@ -11,6 +11,11 @@ export const providerWith = (...capabilities: Capability[]): Provider => ({
   id: "fake",
   capabilities: new Set(capabilities),
   getCloses: () => Promise.resolve([]),
+  // Required alongside getCloses by the `closes` capability (ADR-0012): a
+  // provider advertising closes must back the instrument-currency surface.
+  getInstrumentInfo: (ticker) => Promise.resolve({ ticker, currency: "USD" }),
+  // Return type is AnalystSnapshot | null (ADR-0012 decision 2); this fake
+  // reports coverage.
   getAnalystTargets: () =>
     Promise.resolve({
       ticker: "X",

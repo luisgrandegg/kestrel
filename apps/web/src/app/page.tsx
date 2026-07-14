@@ -27,7 +27,7 @@ export default async function DashboardPage() {
   const asOf = utcIsoDate(new Date());
   const data = await getDashboardData(
     repository(),
-    registry(),
+    registry(asOf),
     webConfig(),
     asOf,
   );

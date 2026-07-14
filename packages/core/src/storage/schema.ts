@@ -10,8 +10,9 @@
  *   repository validates Number.isFinite before insert; adapters remain the
  *   primary fail-loud gate (CLAUDE.md guardrail 6).
  * - `analyst_snapshots` columns NOT NULL, matching the non-nullable
- *   AnalystSnapshot type. If backlog 010's open question makes targets
- *   nullable, type and schema migrate together.
+ *   AnalystSnapshot type. ADR-0012 kept `medianTarget` non-nullable —
+ *   "no coverage" is an ABSENT snapshot (the adapter returns null and
+ *   ingestion writes nothing), not a null column — so this schema stands.
  *
  * Observations (prices, snapshots) are append-only: the repository exposes
  * no UPDATE or DELETE for them (CONSTITUTION.md §3.1). `instruments` is the

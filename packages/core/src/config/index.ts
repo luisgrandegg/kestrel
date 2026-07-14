@@ -38,8 +38,8 @@ export interface IngestionConfig {
    * Consecutive adapter failures before an instrument is marked `error`.
    * Required by MVP.md §7 ("error on repeated adapter failure") though §9
    * lists no key for it — added here rather than hardcoded (guardrail 5).
-   * The default of 3 is a provisional gap-fill pending user sign-off
-   * (recorded on backlog item 011).
+   * The default of 3 is the signed-off value (owner decision 2026-07-14,
+   * ADR-0012 / backlog item 011).
    */
   maxConsecutiveFailures: number;
 }

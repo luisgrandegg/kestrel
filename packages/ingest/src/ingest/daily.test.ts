@@ -18,6 +18,8 @@ interface FakeOptions {
   metadataFailing?: Set<string>;
   /** Return an empty array from getCloses (weekend/holiday window). */
   emptyCloses?: boolean;
+  /** Tickers whose getInstrumentInfo (currency) fetch should throw. */
+  currencyFailing?: Set<string>;
 }
 
 const makeFake = (options: FakeOptions = {}) => {
@@ -44,6 +46,16 @@ const makeFake = (options: FakeOptions = {}) => {
         all.push({ ticker, date: d, close: 100 });
       }
       return Promise.resolve(all);
+    },
+    // Required alongside getCloses by the `closes` capability (ADR-0012).
+    getInstrumentInfo: (ticker) => {
+      calls.push(`currency:${ticker}`);
+      if (options.currencyFailing?.has(ticker)) {
+        return Promise.reject(
+          new Error(`currency endpoint down for ${ticker}`),
+        );
+      }
+      return Promise.resolve({ ticker, currency: "USD" });
     },
     getAnalystTargets: (ticker) => {
       calls.push(`analyst:${ticker}`);
@@ -93,12 +105,17 @@ const makeDeps = (provider: Provider): BackfillDeps & { sleeps: number[] } => {
   };
 };
 
-/** A ready instrument with history through `lastDate` and fresh metadata. */
+/**
+ * A ready instrument with history through `lastDate` and fresh metadata.
+ * Currency defaults to already-known ("USD") so the daily currency copy is a
+ * no-op — tests exercising the copy pass `currency: null` explicitly.
+ */
 const seedReady = async (
   repo: StorageRepository,
   ticker: string,
   lastDate: IsoDate,
   metadataSyncedOn: IsoDate,
+  currency: string | null = "USD",
 ): Promise<void> => {
   await repo.addInstrument(ticker, "2026-01-01");
   const closes: DailyClose[] = [];
@@ -114,6 +131,9 @@ const seedReady = async (
   });
   await repo.recordMetadataSync(ticker, metadataSyncedOn);
   await repo.recordPriceSync(ticker, lastDate);
+  if (currency !== null) {
+    await repo.setInstrumentCurrency(ticker, currency);
+  }
   await repo.setInstrumentState(ticker, "ready");
 };
 
@@ -197,20 +217,67 @@ describe("runDaily — metadata TTL (MVP §7 step 1)", () => {
   });
 });
 
+describe("runDaily — instrument currency (ADR-0012 decision 3)", () => {
+  it("copies currency for a ready instrument whose currency is still null", async () => {
+    const { provider, calls } = makeFake();
+    const deps = makeDeps(provider);
+    // Ready but never captured currency (e.g. promoted before the surface).
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY, null);
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBeNull();
+
+    const report = await runDaily(deps, ["ACME"]);
+    expect(report.refreshed).toEqual(["ACME"]);
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBe("USD");
+    expect(calls.filter((c) => c.startsWith("currency:"))).toEqual([
+      "currency:ACME",
+    ]);
+  });
+
+  it("does not refetch currency once known", async () => {
+    const { provider, calls } = makeFake();
+    const deps = makeDeps(provider);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY, "EUR");
+
+    await runDaily(deps, ["ACME"]);
+    expect(calls.filter((c) => c.startsWith("currency:"))).toEqual([]);
+    // The already-known currency is untouched (never overwritten).
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBe("EUR");
+  });
+
+  it("charges a currency-fetch failure as a provider failure", async () => {
+    const currencyFailing = new Set(["ACME"]);
+    const { provider } = makeFake({ currencyFailing });
+    const deps = makeDeps(provider);
+    await seedReady(deps.repo, "ACME", addDays(TODAY, -3), TODAY, null);
+
+    const report = await runDaily(deps, ["ACME"]);
+    expect(report.failures).toEqual([
+      { ticker: "ACME", message: "currency endpoint down for ACME" },
+    ]);
+    // Prices landed before the currency step, but the whole body did not
+    // succeed, so refreshed is NOT reported and the streak advances.
+    expect(report.refreshed).toEqual([]);
+    expect((await deps.repo.getInstrument("ACME"))?.currency).toBeNull();
+    expect((await deps.repo.getInstrument("ACME"))?.consecutiveFailures).toBe(
+      1,
+    );
+  });
+});
+
 describe("runDaily — one throttled run across both phases (MVP §7 step 3)", () => {
   it("shares a single throttle: the backfill phase's first call also sleeps", async () => {
     const { provider, calls } = makeFake();
     const deps = makeDeps(provider);
-    // One ready instrument (1 price call) + one brand-new instrument
-    // (1 price call + 3 metadata calls) in the same run.
+    // One ready instrument with known currency (1 price call) + one brand-new
+    // instrument (1 price + 1 currency + 3 metadata calls) in the same run.
     await seedReady(deps.repo, "OLD", addDays(TODAY, -3), TODAY);
 
     const report = await runDaily(deps, ["OLD", "NEW"]);
     expect(report.refreshed).toEqual(["OLD"]);
     expect(report.backfill.promoted).toEqual(["NEW"]);
-    expect(calls).toHaveLength(5);
-    // 5 calls, one throttle: 4 sleeps — including the phase boundary.
-    expect(deps.sleeps).toHaveLength(4);
+    expect(calls).toHaveLength(6);
+    // 6 calls, one throttle: 5 sleeps — including the phase boundary.
+    expect(deps.sleeps).toHaveLength(5);
     expect(new Set(deps.sleeps)).toEqual(
       new Set([deps.config.ingestion.interCallDelayMs]),
     );
