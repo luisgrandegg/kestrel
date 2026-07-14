@@ -25,3 +25,4 @@ This folder records **why** Kestrel is built the way it is: one record per signi
 | [0010](0010-project-name-kestrel.md) | Project name: Kestrel | Accepted | 2026-07-12 |
 | [0011](0011-vercel-supabase-deployment.md) | Deploy target: Vercel + Supabase, monorepo with in-app ingest worker | Accepted | 2026-07-13 |
 | [0012](0012-yahoo-adapter-decisions.md) | Yahoo adapter: injected asOf clock, nullable analyst coverage, currency surface, failure threshold | Accepted | 2026-07-14 |
+| [0013](0013-users-auth-and-multi-user.md) | Users, auth (better-auth), and the multi-user pivot | Accepted | 2026-07-14 |
