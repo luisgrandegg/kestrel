@@ -25,7 +25,9 @@ import type {
  *
  * All methods are async so implementations may be backed by out-of-process
  * stores. Implementations: SQLite (`Repository`, ./repository.ts — tests
- * and local runs); Supabase Postgres (planned per ADR-0011).
+ * and local runs); Supabase Postgres (`PostgresRepository`, ./postgres.ts —
+ * ADR-0011). Both run the shared contract suite
+ * (../test-support/repositoryContract.ts).
  */
 export interface StorageRepository {
   close(): Promise<void>;

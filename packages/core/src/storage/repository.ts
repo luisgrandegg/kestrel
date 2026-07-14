@@ -1,9 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import {
-  assertIsoDate,
-  assertNonNegativeInteger,
-  assertPositiveFinite,
-} from "../types/guards.js";
+import { assertNonNegativeInteger } from "../types/guards.js";
 import type {
   AnalystSnapshot,
   DailyClose,
@@ -15,6 +11,13 @@ import type {
 } from "../types/index.js";
 import type { StorageRepository } from "./port.js";
 import { SCHEMA } from "./schema.js";
+import {
+  dateBound,
+  validateAnalystSnapshot,
+  validateCloses,
+  validateDividendSnapshot,
+  validateEarningsSnapshot,
+} from "./validation.js";
 
 /**
  * SQLite implementation of the {@link StorageRepository} port (backlog item
@@ -160,32 +163,19 @@ export class Repository implements StorageRepository {
     this.mustUpdate(this.db.prepare(sql).run(value, ticker), ticker);
   }
 
-  /**
-   * Validate an optional date bound before it reaches a lexicographic SQL
-   * comparison: a malformed bound (e.g. "2026-7-1") compares greater than
-   * every zero-padded date and would silently read past the intended as-of
-   * date — a no-lookahead violation — instead of erroring.
-   */
-  private dateBound(name: string, bound?: IsoDate): string | null {
-    if (bound === undefined) {
-      return null;
-    }
-    assertIsoDate(name, bound);
-    return bound;
-  }
-
   // ---- prices (append-only observations) ----
 
   /**
-   * Validates here (not in SQL) because SQL's CHECK cannot express
-   * finiteness. Uses a savepoint rather than BEGIN so callers may compose
-   * this inside their own transaction.
+   * Validates via the shared write-edge guards (./validation.ts), not in
+   * SQL, because SQL's CHECK cannot express finiteness. Uses a savepoint
+   * internally for batch atomicity. NOTE: batch atomicity is the ONLY
+   * transactional guarantee the port offers — callers must not wrap
+   * repository calls in their own outer transaction; the Postgres engine
+   * runs this on a pooled connection where an outer transaction would not
+   * compose (see ./postgres.ts).
    */
   async insertCloses(closes: readonly DailyClose[]): Promise<void> {
-    for (const { ticker, date, close } of closes) {
-      assertPositiveFinite(`close for ${ticker} @ ${date}`, close);
-      assertIsoDate(`close date for ${ticker}`, date);
-    }
+    validateCloses(closes);
     const stmt = this.db.prepare(
       "INSERT INTO prices (ticker, date, close) VALUES (?, ?, ?) ON CONFLICT(ticker, date) DO NOTHING",
     );
@@ -222,8 +212,8 @@ export class Repository implements StorageRepository {
       )
       .all({
         ticker,
-        from: this.dateBound("from", from),
-        to: this.dateBound("to", to),
+        from: dateBound("from", from),
+        to: dateBound("to", to),
       }) as unknown as DailyClose[];
   }
 
@@ -241,7 +231,7 @@ export class Repository implements StorageRepository {
       )
       .all({
         ticker,
-        asOf: this.dateBound("asOf", asOf),
+        asOf: dateBound("asOf", asOf),
         n,
       }) as unknown as DailyClose[];
     return rows.reverse();
@@ -257,7 +247,7 @@ export class Repository implements StorageRepository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR date <= :asOf)
          ORDER BY date DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
+      .get({ ticker, asOf: dateBound("asOf", asOf) }) as unknown as
       | DailyClose
       | undefined;
   }
@@ -265,18 +255,7 @@ export class Repository implements StorageRepository {
   // ---- metadata snapshots (append-only observations) ----
 
   async insertAnalystSnapshot(snapshot: AnalystSnapshot): Promise<void> {
-    assertIsoDate(
-      `analyst snapshot asOf for ${snapshot.ticker}`,
-      snapshot.asOf,
-    );
-    assertPositiveFinite(
-      `medianTarget for ${snapshot.ticker}`,
-      snapshot.medianTarget,
-    );
-    assertNonNegativeInteger(
-      `numAnalysts for ${snapshot.ticker}`,
-      snapshot.numAnalysts,
-    );
+    validateAnalystSnapshot(snapshot);
     this.db
       .prepare(
         "INSERT INTO analyst_snapshots (ticker, as_of, median_target, num_analysts) VALUES (?, ?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -301,22 +280,13 @@ export class Repository implements StorageRepository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
+      .get({ ticker, asOf: dateBound("asOf", asOf) }) as unknown as
       | AnalystSnapshot
       | undefined;
   }
 
   async insertEarningsSnapshot(snapshot: EarningsSnapshot): Promise<void> {
-    assertIsoDate(
-      `earnings snapshot asOf for ${snapshot.ticker}`,
-      snapshot.asOf,
-    );
-    if (snapshot.nextEarningsDate !== null) {
-      assertIsoDate(
-        `nextEarningsDate for ${snapshot.ticker}`,
-        snapshot.nextEarningsDate,
-      );
-    }
+    validateEarningsSnapshot(snapshot);
     this.db
       .prepare(
         "INSERT INTO earnings_snapshots (ticker, as_of, next_earnings_date) VALUES (?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -335,22 +305,13 @@ export class Repository implements StorageRepository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
+      .get({ ticker, asOf: dateBound("asOf", asOf) }) as unknown as
       | EarningsSnapshot
       | undefined;
   }
 
   async insertDividendSnapshot(snapshot: DividendSnapshot): Promise<void> {
-    assertIsoDate(
-      `dividend snapshot asOf for ${snapshot.ticker}`,
-      snapshot.asOf,
-    );
-    if (snapshot.nextExDivDate !== null) {
-      assertIsoDate(
-        `nextExDivDate for ${snapshot.ticker}`,
-        snapshot.nextExDivDate,
-      );
-    }
+    validateDividendSnapshot(snapshot);
     this.db
       .prepare(
         "INSERT INTO dividend_snapshots (ticker, as_of, next_ex_div_date) VALUES (?, ?, ?) ON CONFLICT(ticker, as_of) DO NOTHING",
@@ -369,7 +330,7 @@ export class Repository implements StorageRepository {
          WHERE ticker = :ticker AND (:asOf IS NULL OR as_of <= :asOf)
          ORDER BY as_of DESC LIMIT 1`,
       )
-      .get({ ticker, asOf: this.dateBound("asOf", asOf) }) as unknown as
+      .get({ ticker, asOf: dateBound("asOf", asOf) }) as unknown as
       | DividendSnapshot
       | undefined;
   }

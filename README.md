@@ -19,9 +19,9 @@ investment advice.
 
 ```
 providers → ingest → storage → metrics → screens → ui
-(adapters)  (daily,   (SQLite,  (pure     (pure     (pure text
-            throttled) append-   functions) predicates) renderer)
-                       only)
+(adapters)  (daily,   (SQLite/  (pure     (pure     (pure text
+            throttled) Postgres, functions) predicates) renderer)
+                       append-only)
 ```
 
 - **Append-only storage.** Prices and metadata snapshots are observations:
@@ -50,7 +50,8 @@ dependency-ordered items in [`docs/backlog/`](docs/backlog/).
 Every backlog item except the Yahoo adapter (010) is built and tested:
 config, shared types, seam lint, all three metrics (implied upside;
 completed-fluctuations ZigZag with pinned acceptance tests; event
-proximity), append-only SQLite storage, provider registry, throttled
+proximity), append-only storage (SQLite and Supabase Postgres behind one
+seam, one contract suite), provider registry, throttled
 idempotent ingestion with a `pending → backfilling → ready` lifecycle, all
 three screens, the dashboard renderer, and the scheduled GitHub Action.
 M3 and M7 remain partially open exactly where they depend on that adapter.
@@ -121,9 +122,10 @@ packages/
       config/      §9 defaults + validated overrides
       types/       shared DTOs, guards — the pure leaf every layer may import
       metrics/     impliedUpside, completedFluctuations, daysToEvent (pure)
-      storage/     the seam contract (port) + SQLite repository — the only
-                   code that touches the database; consumers type against
-                   the port
+      storage/     the seam contract (port) + repositories for both engines
+                   (SQLite; Postgres/Supabase per ADR-0011, via a driverless
+                   SQL-executor seam) — the only code that touches the
+                   database; consumers type against the port
       screens/     the three category predicates + shared base predicate
       test-support/  test-only fixtures (outside the seam graph)
   ingest/          @kestrel/ingest — the worker library (depends on core)
@@ -138,6 +140,9 @@ apps/
     src/
       app/         harness, pipeline, CLI entrypoint
       ui/          dashboard renderer (pure text)
+supabase/
+  migrations/ Postgres schema — the SQL twin of storage/schema.ts; the
+              repository contract tests run against both engines
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)
