@@ -40,12 +40,12 @@ module.exports = {
       comment:
         "Consumers depend on the storage seam contract (storage/port), " +
         "never a concrete engine: only storage/ itself and the composition " +
-        "root (apps/cli's app/, which constructs one) may import a " +
+        "roots (each app's src/app/, which construct one) may import a " +
         "repository module (SQLite or Postgres).",
       severity: "error",
       from: {
         path: "^(packages|apps)/",
-        pathNot: "^(packages/core/src/storage|apps/cli/src/app)/",
+        pathNot: "^(packages/core/src/storage|apps/[^/]+/src/app)/",
       },
       to: { path: "^packages/core/src/storage/(repository|postgres)" },
     },
@@ -102,12 +102,15 @@ module.exports = {
     {
       name: "app-is-top",
       comment:
-        "app/ is the composition root (the one place that may import " +
-        "both screens/ and providers/); nothing else may import it — " +
-        "including directories that don't exist yet (pathNot, not an allowlist).",
+        "Each app's src/app/ is a composition root (the one place that may " +
+        "import both screens/ and providers/, and construct a repository); " +
+        "nothing else may import either app's app dir — including " +
+        "directories that don't exist yet (pathNot, not an allowlist). " +
+        "Cross-app imports are additionally impossible via package " +
+        "specifiers (no workspace dependency → not-to-unresolvable).",
       severity: "error",
-      from: { pathNot: "^apps/cli/src/app/" },
-      to: { path: "^apps/cli/src/app/" },
+      from: { pathNot: "^apps/[^/]+/src/app/" },
+      to: { path: "^apps/[^/]+/src/app/" },
     },
     {
       name: "packages-do-not-import-apps",
@@ -129,7 +132,7 @@ module.exports = {
       severity: "error",
       from: {
         path: "^(packages|apps)/",
-        pathNot: "^(apps/cli/src/(app|ui)|packages/core/src/screens)/",
+        pathNot: "^(apps/[^/]+/src/(app|ui)|packages/core/src/screens)/",
       },
       to: { path: "^packages/core/src/screens/" },
     },
@@ -164,15 +167,16 @@ module.exports = {
     enhancedResolveOptions: {
       exportsFields: ["exports"],
       conditionNames: ["types", "import", "require", "node", "default"],
-      extensions: [".ts", ".js", ".json"],
+      extensions: [".ts", ".tsx", ".js", ".json"],
     },
     // Tests and test-only fixture helpers sit outside the seam graph; our
-    // packages' dist/ is built output, not source. The dist pattern is
-    // anchored to OUR workspace roots — a bare "/dist/" would also match
-    // node_modules/<pkg>/dist/... and silently drop most npm-package edges
-    // from the graph (which would blind the engine-library rule above).
+    // packages' dist/ (and apps/web's .next/) is built output, not source.
+    // The dist pattern is anchored to OUR workspace roots — a bare "/dist/"
+    // would also match node_modules/<pkg>/dist/... and silently drop most
+    // npm-package edges from the graph (which would blind the
+    // engine-library rule above).
     exclude: {
-      path: "\\.test\\.ts$|/src/test-support/|^(packages|apps)/[^/]+/dist/",
+      path: "\\.test\\.ts$|/src/test-support/|^(packages|apps)/[^/]+/dist/|^apps/[^/]+/\\.next/|^apps/web/next-env\\.d\\.ts$",
     },
   },
 };

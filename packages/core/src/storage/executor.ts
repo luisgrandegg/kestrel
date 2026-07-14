@@ -4,9 +4,9 @@
  * `PostgresRepository` types against these interfaces so @kestrel/core needs
  * no database-driver dependency. The contract tests adapt an in-process
  * PGlite instance (query → rows/affectedRows, transaction → PGlite's own);
- * the deployed composition root (apps/web, not yet landed) WILL adapt
- * `pg.Pool` (query → rows/rowCount, transaction → a client checked out
- * with BEGIN/COMMIT/ROLLBACK). Swapping drivers touches only that adapter,
+ * the deployed composition root adapts `pg.Pool` (query → rows/rowCount,
+ * transaction → a client checked out with BEGIN/COMMIT/ROLLBACK) in
+ * apps/web/src/app/_lib/db.ts. Swapping drivers touches only that adapter,
  * never the repository.
  */
 

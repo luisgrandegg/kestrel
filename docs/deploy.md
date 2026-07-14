@@ -1,0 +1,87 @@
+# Deploying Kestrel (Vercel + Supabase)
+
+The hosted deployment per [ADR-0011](adr/0011-vercel-supabase-deployment.md):
+the Next.js dashboard (`apps/web`) on Vercel, reading Supabase Postgres
+through the storage seam, with the ingest worker (`packages/ingest`) run by
+the app itself via a Vercel-Cron-invoked route (`/api/ingest`).
+
+## 1. Create the Supabase project
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Apply the schema in `supabase/migrations/00001_init.sql`:
+   - **SQL editor:** paste the file's contents into the Supabase dashboard's
+     SQL editor and run it; or
+   - **supabase CLI:** link the repo (`supabase link --project-ref <ref>`)
+     and run `supabase db push` (the migration lives in the conventional
+     `supabase/migrations/` directory).
+3. Copy the **Transaction pooler** connection string (Project settings →
+   Database → Connection string → Transaction pooler, port 6543). This is
+   the `DATABASE_URL` below.
+
+   > **Why the transaction pooler works here:** node-postgres is generally
+   > constrained under pgBouncer's transaction mode (no session state, no
+   > named prepared statements). Kestrel's repository issues only simple
+   > parameterized queries — no named prepared statements, no session
+   > settings — and its one multi-statement transaction (`insertCloses`)
+   > runs BEGIN…COMMIT on a single checked-out client, which transaction
+   > mode supports. If you prefer, the **Session pooler** string also
+   > works; the direct (non-pooled) string is not recommended from
+   > serverless functions.
+
+## 2. Import the repo into Vercel
+
+1. Vercel → Add New Project → import the GitHub repo.
+2. **Root Directory:** `apps/web` — and enable **"Include source files
+   outside of the Root Directory"** (the app consumes `@kestrel/core`,
+   `@kestrel/ingest`, and the repo-root `watchlist.json` as source).
+3. Framework preset: **Next.js** (auto-detected). pnpm is detected from the
+   lockfile; no custom build command needed.
+
+Note: `vercel.json` (the cron definition) lives at `apps/web/vercel.json`,
+because with a Root Directory set, Vercel reads project config from that
+directory, not the repo root.
+
+## 3. Environment variables
+
+Set these on the Vercel project (Production):
+
+| Variable | Required | Value |
+|---|---|---|
+| `DATABASE_URL` | yes | The Supabase **Transaction pooler** connection string from step 1. Read lazily on first query — `next build` does not need it. |
+| `CRON_SECRET` | yes | A long random string (e.g. `openssl rand -hex 32`). Vercel Cron automatically sends it as `Authorization: Bearer $CRON_SECRET`; the ingest route rejects everything else (401) and refuses to run at all if unset (500, never an open route). |
+| `KESTREL_CONFIG` | no | JSON object of config overrides, e.g. `{"minAnalysts": 7, "screens": {"category1": {"upsideThreshold": 0.4}}}`. There is no repo-root cwd on Vercel, so `kestrel.config.json` does not apply to the web app — this env var is the override path. Absent means the MVP.md §9 defaults; invalid JSON or unknown keys fail loud. |
+
+## 4. Verify the cron
+
+`apps/web/vercel.json` schedules `GET /api/ingest` at `30 23 * * *` UTC —
+the same slot as the GitHub Action (well after the US close, tolerant of
+cron lag because the pipeline dedupes by UTC date).
+
+- Check Vercel dashboard → project → Settings → Cron Jobs after the first
+  production deployment: **crons only run on production deployments**.
+- The Hobby plan allows daily crons (with loose firing precision — fine
+  here: idempotency makes a late or repeated fire harmless); Pro allows
+  more.
+- Trigger it manually to smoke-test:
+  `curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>.vercel.app/api/ingest`
+  — until the Yahoo adapter (backlog item 010) lands it returns a loud
+  `skipped` JSON body, and the dashboard renders every screen disabled.
+
+## 5. Function duration
+
+The route sets `maxDuration = 300`, but the effective ceiling is
+plan-dependent (Hobby caps lower than Pro; check Vercel's current limits).
+This is fine by design: ingestion is idempotent and resumable (guardrail
+7), so a timeout mid-backfill simply resumes on the next fire without
+duplicating anything. If the watchlist outgrows the function ceiling, the
+escape hatch recorded in ADR-0011 is to move `packages/ingest` to a
+dedicated runner (a real worker, or back to the GitHub Action) — it is a
+separate package precisely so that move touches no internals.
+
+## 6. The existing GitHub Action
+
+`.github/workflows/ingest.yml` keeps running the same daily pipeline
+against the repo-committed SQLite file, entirely independent of the Vercel
+deployment (two engines behind one storage seam; they do not share data).
+Once Supabase is live and trusted it can be disabled (owner's call) —
+delete the workflow or comment out its `schedule` trigger.
