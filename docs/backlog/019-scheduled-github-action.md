@@ -14,7 +14,7 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 - Weekend/holiday runs are harmless no-ops (dedupe by trading date).
 - Document how to add tickers to the watchlist (README or `docs/`).
 - The entrypoint passes explicit watchlist/config paths (the module defaults are cwd-relative and assume repo-root invocation).
-- The entrypoint derives `today` as the **UTC calendar date** from the real clock — the only sanctioned wall-clock read in the codebase (everything under `src/ingest` takes an injected `IsoDate`) — and injects it into `runDaily`; tests pin the UTC conversion.
+- The entrypoint derives `today` as the **UTC calendar date** from the real clock — the only sanctioned wall-clock read in the codebase (everything under `packages/ingest` takes an injected `IsoDate`) — and injects it into `runDaily`; tests pin the UTC conversion.
 
 ## Acceptance criteria
 
@@ -22,7 +22,7 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
   *Wired and end-to-end tested with a fake provider; the scheduled run currently
   skips ingestion (loudly) and renders all screens disabled because no live
   provider exists yet — ticks when item 010 registers the Yahoo adapter in
-  `src/app/providers.ts`.*
+  `apps/cli/src/app/providers.ts`.*
 - [x] A manually re-triggered run on the same day changes nothing (idempotency observed end-to-end).
 - [x] Watchlist-addition docs exist and match item 011's mechanism.
 - [ ] M7 — and with it the whole-MVP Definition of Done in `CLAUDE.md` — can be checked off.

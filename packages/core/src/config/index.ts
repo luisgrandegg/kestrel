@@ -113,7 +113,7 @@ export function resolveConfig(overrides: ConfigOverrides = {}): KestrelConfig {
 
 /**
  * Load config from a JSON override file merged over the defaults.
- * (The read/parse ladder mirrors loadWatchlist in src/ingest — keep their
+ * (The read/parse ladder mirrors loadWatchlist in @kestrel/ingest — keep their
  * error-wrapping styles in sync.)
  *
  * With no argument, the default path is optional: absence means "no

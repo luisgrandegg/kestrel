@@ -11,7 +11,7 @@ import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 /**
  * Screen evaluation harness (backlog item 014) — the composition root that
  * may import both screens/ and providers/ (recorded on the backlog item;
- * the boundary lint pins src/app/ as the top of the graph).
+ * the boundary lint pins apps/cli/src/app/ as the top of the graph).
  *
  * Given the repository and an explicit as-of date, it builds each ready
  * instrument's snapshot from storage, consults the registry, and evaluates

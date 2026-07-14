@@ -36,7 +36,7 @@ export function normalizeTicker(raw: string): string {
 
 /**
  * Load and validate the watchlist file: a JSON array of ticker strings.
- * (The read/parse ladder mirrors loadConfig in src/config — keep their
+ * (The read/parse ladder mirrors loadConfig in @kestrel/core config — keep their
  * error-wrapping styles in sync.)
  */
 export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {

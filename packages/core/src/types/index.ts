@@ -38,7 +38,7 @@ export type ScreenResolution =
  * One screen's evaluation result: its registry resolution and (when
  * enabled) the matches with their supporting numbers. Lives here so the
  * UI can type against it without importing the composition root (the
- * boundary lint pins src/app/ as the top of the graph).
+ * boundary lint pins apps/cli/src/app/ as the top of the graph).
  */
 export interface ScreenEvaluation<Match> {
   screenId: string;

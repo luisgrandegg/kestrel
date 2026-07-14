@@ -6,11 +6,11 @@ import { runDailyPipeline } from "./main.js";
 /**
  * CLI entrypoint for the scheduled daily run (backlog item 019).
  *
- *   node dist/app/cli.js [dbPath] [watchlistPath] [dashboardPath] [configPath]
+ *   node apps/cli/dist/cli.js [dbPath] [watchlistPath] [dashboardPath] [configPath]
  *
  * The `new Date()` below is the one sanctioned wall-clock read in the
  * codebase: it becomes the run's UTC calendar date and is injected
- * downward — everything under src/ingest and src/app takes an explicit
+ * downward — everything under @kestrel/ingest and app/ takes an explicit
  * IsoDate (guardrail 2).
  */
 const [

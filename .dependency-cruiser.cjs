@@ -133,6 +133,18 @@ module.exports = {
       from: {},
       to: { circular: true },
     },
+    {
+      name: "not-to-unresolvable",
+      comment:
+        "Every import must resolve. Without this, a forbidden cross-package " +
+        "import written as an @kestrel/... specifier from a package that " +
+        "does not declare the dependency is UNRESOLVABLE — it matches no " +
+        "path-keyed seam rule above and the boundary lint silently passes " +
+        "(the violation then only surfaces as an unrelated-looking TS2307).",
+      severity: "error",
+      from: {},
+      to: { couldNotResolve: true },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

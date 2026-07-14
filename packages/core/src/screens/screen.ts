@@ -12,7 +12,7 @@ import type {
  *
  * A screen is a declarative, deterministic predicate over stored data. It
  * performs no I/O and never touches a provider: the composition root
- * (src/app/) reads storage into an InstrumentSnapshot per ticker, consults
+ * (apps/cli/src/app/) reads storage into an InstrumentSnapshot per ticker, consults
  * the registry to disable screens with unmet capabilities, and hands
  * enabled screens their inputs.
  *
