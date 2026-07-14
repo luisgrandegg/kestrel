@@ -3,11 +3,6 @@ name: CI
 on:
   push:
     branches: [main]
-    # Daily-ingestion data commits (binary DB + rendered dashboard) carry
-    # no source change — don't burn a CI run on each one.
-    paths-ignore:
-      - "data/**"
-      - "dashboard.md"
   pull_request:
 
 jobs:

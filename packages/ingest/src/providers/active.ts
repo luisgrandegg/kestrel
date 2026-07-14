@@ -4,10 +4,10 @@ import { YahooProvider } from "./yahoo/yahoo.js";
 
 /**
  * The active provider set for real runs — the one place adapters are
- * registered. Lives in @kestrel/ingest (not an app) because BOTH
- * composition roots — the CLI (apps/cli) and the web app's cron route
- * (apps/web, ADR-0011) — need the same single registration point, and
- * apps cannot import each other.
+ * registered. Lives in @kestrel/ingest (not an app) because the web app's
+ * composition roots — the dashboard page and the cron route (apps/web,
+ * ADR-0011) — share the same single registration point, and it belongs to
+ * the ingestion library rather than any one entrypoint.
  *
  * The MVP registers the one Yahoo adapter (ADR-0008), which serves all four
  * capabilities plus the instrument currency that travels with `closes`, so

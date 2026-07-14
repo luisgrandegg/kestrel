@@ -18,9 +18,9 @@ investment advice.
 ## How it works
 
 ```
-providers → ingest → storage → metrics → screens → ui
-(adapters)  (daily,   (SQLite/  (pure     (pure     (pure text
-            throttled) Postgres, functions) predicates) renderer)
+providers → ingest → storage → metrics → screens → dashboard
+(adapters)  (daily,   (Postgres/ (pure     (pure      (HTML page,
+            throttled) SQLite,   functions) predicates) apps/web)
                        append-only)
 ```
 
@@ -30,8 +30,8 @@ providers → ingest → storage → metrics → screens → ui
   any screen result is reproducible after the fact.
 - **No lookahead.** Metrics and screens see only data observed on or before
   the as-of date. The sanctioned wall-clock reads live in the
-  composition-root entrypoints (the CLI entrypoint and the web app's
-  page/route handlers); everything below them takes an injected date.
+  composition-root entrypoints (the web app's dashboard page and cron
+  route handlers); everything below them takes an injected date.
 - **Capabilities gate screens.** A screen whose data needs aren't served by
   an active provider renders a visible "unavailable — missing capability: X"
   state. It is never hidden and never fed fabricated or stale data.
@@ -50,11 +50,17 @@ dependency-ordered items in [`docs/backlog/`](docs/backlog/).
 
 The MVP is feature-complete: config, shared types, seam lint, all three
 metrics (implied upside; completed-fluctuations ZigZag with pinned acceptance
-tests; event proximity), append-only storage (SQLite and Supabase Postgres
+tests; event proximity), append-only storage (Supabase Postgres and SQLite
 behind one seam, one contract suite), provider registry, throttled idempotent
 ingestion with a `pending → backfilling → ready` lifecycle, all three screens,
-the dashboard renderer, the scheduled GitHub Action, and the Yahoo Finance
-adapter (010) — which serves all four capabilities plus native currency.
+the dashboard, and the Yahoo Finance adapter (010) — which serves all four
+capabilities plus native currency.
+
+Kestrel now targets a single deployment — the Next.js app in `apps/web` on
+Vercel over Supabase Postgres, with ingestion run by the app itself via a
+Vercel-Cron route. The standalone CLI and the SQLite-committing GitHub Action
+have been retired (ADR-0013); the SQLite repository survives only as the fast
+reference engine that proves the storage port in the contract tests.
 
 **Live:** the Yahoo adapter is registered in
 `packages/ingest/src/providers/active.ts`, so scheduled runs ingest live
@@ -72,20 +78,21 @@ Requires Node ≥ 22.13 and pnpm.
 
 ```sh
 pnpm install
-pnpm test        # 235 tests
+pnpm test        # unit + storage-contract + web-harness suites
 pnpm lint        # biome + dependency-cruiser seam rules
 pnpm typecheck
-pnpm daily       # build + run the daily pipeline locally
+pnpm build       # turbo build, including apps/web's `next build`
 ```
 
-The daily entrypoint (`node apps/cli/dist/cli.js [dbPath] [watchlistPath]
-[dashboardPath] [configPath]`) ingests (when a provider is active), then
-writes the rendered dashboard to `dashboard.md` and prints it.
+To run the app locally, `cd apps/web` and use the Next.js dev server; it
+reads Supabase Postgres through the storage seam and runs ingestion via the
+`/api/ingest` route. Environment setup is in [`docs/deploy.md`](docs/deploy.md).
 
 ## Configuration
 
-Defaults follow `MVP.md` §9. Create `kestrel.config.json` at the repo root
-to override any subset, e.g.:
+Defaults follow `MVP.md` §9. To override any subset, set the `KESTREL_CONFIG`
+env var to a JSON object (there is no repo-root cwd on Vercel, so the
+deployed app reads config from the environment, not a file):
 
 ```json
 {
@@ -108,27 +115,27 @@ the backfill lifecycle behave.
 
 ## Scheduled ingestion
 
-`.github/workflows/ingest.yml` runs the throttled daily pipeline at 23:30
-UTC (well after the US close, tolerant of cron lag; same-day re-runs are
-byte-identical no-ops) and commits the SQLite database and rendered
-dashboard back to the repo.
+A Vercel Cron hits the `/api/ingest` route at 23:30 UTC (well after the US
+close, tolerant of cron lag; the throttled pipeline is idempotent and
+resumable, so a same-day re-run or a mid-run timeout simply resumes). The
+route is machine-authenticated with `CRON_SECRET` and writes straight to
+Supabase Postgres through the storage seam. There is no self-committing
+GitHub Action — ingestion belongs to the deployed app (ADR-0013).
 
 ## Deployment
 
-The hosted target (ADR-0011) is the Next.js dashboard in `apps/web` on
-Vercel, reading Supabase Postgres through the same storage seam, with the
-ingest worker run by the app via a Vercel-Cron-invoked route
-(`/api/ingest`, same 23:30 UTC slot). Step-by-step setup — Supabase
-project + migration, Vercel import, `DATABASE_URL`/`CRON_SECRET`/
-`KESTREL_CONFIG` env vars, cron verification — lives in
-[`docs/deploy.md`](docs/deploy.md).
+The sole deployment (ADR-0011, ADR-0013) is the Next.js dashboard in
+`apps/web` on Vercel, reading Supabase Postgres through the storage seam,
+with the ingest worker run by the app via the Vercel-Cron-invoked
+`/api/ingest` route. Step-by-step setup — Supabase project + migration,
+Vercel import, `DATABASE_URL`/`CRON_SECRET`/`KESTREL_CONFIG` env vars, cron
+verification — lives in [`docs/deploy.md`](docs/deploy.md).
 
 ## Repository map
 
 A pnpm/Turborepo workspace (ADR-0011): the workspace dependency direction is
-`@kestrel/core` ← `@kestrel/ingest` ← the apps (`@kestrel/cli`,
-`@kestrel/web`), and packages consume each other as TypeScript source via
-package.json `exports`.
+`@kestrel/core` ← `@kestrel/ingest` ← `@kestrel/web`, and packages consume
+each other as TypeScript source via package.json `exports`.
 
 ```
 packages/
@@ -138,28 +145,26 @@ packages/
       types/       shared DTOs, guards — the pure leaf every layer may import
       metrics/     impliedUpside, completedFluctuations, daysToEvent (pure)
       storage/     the seam contract (port) + repositories for both engines
-                   (SQLite; Postgres/Supabase per ADR-0011, via a driverless
-                   SQL-executor seam) — the only code that touches the
+                   (Postgres/Supabase per ADR-0011, via a driverless
+                   SQL-executor seam — the deployed engine; SQLite is the
+                   fast reference engine that proves the port in the
+                   contract tests) — the only code that touches the
                    database; consumers type against the port
       screens/     the three category predicates + shared base predicate
       test-support/  test-only fixtures (outside the seam graph)
   ingest/          @kestrel/ingest — the worker library (depends on core)
     src/
       providers/   Provider interface, capability registry, and the active
-                   adapter set (active.ts — adapters plug in here, once,
-                   for every composition root)
+                   adapter set (active.ts — the one place adapters plug in)
       ingest/      backfill + daily refresh (state machine, throttle,
                    watchlist)
       test-support/  test-only fixtures (outside the seam graph)
 apps/
-  cli/             @kestrel/cli — composition root (depends on core + ingest)
-    src/
-      app/         harness, pipeline, CLI entrypoint
-      ui/          dashboard renderer (pure text)
-  web/             @kestrel/web — the hosted composition root (ADR-0011):
+  web/             @kestrel/web — the sole composition root (ADR-0011, 0013):
     src/           Next.js dashboard on Vercel over Supabase Postgres
-      app/         page (HTML dashboard), /api/ingest cron route, and
-                   _lib/ composition glue (pg-pool executor, pipeline)
+      app/         page (HTML dashboard) + api/ingest cron route =
+                   presentation; _lib/ composition glue (pg-pool executor,
+                   pipeline, screen-evaluation harness, formatters)
 supabase/
   migrations/ Postgres schema — the SQL twin of storage/schema.ts; the
               repository contract tests run against both engines

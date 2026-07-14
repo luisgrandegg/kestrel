@@ -1,8 +1,7 @@
 /**
- * Number formatting for the §8 dashboard rows — the web twin of the two
- * formatters at the bottom of apps/cli/src/ui/dashboard.ts (keep in sync;
- * both are pinned by tests). Deliberately duplicated: six lines of pure
- * presentation do not justify a shared package.
+ * Number formatting for the §8 dashboard rows — pure presentation helpers
+ * pinned by tests. The single home for the dashboard's number formatting
+ * now that apps/web is the only composition root.
  */
 
 /** Implied upside as a percentage with one decimal, e.g. 0.25 → "25.0%". */

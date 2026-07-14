@@ -9,8 +9,7 @@ import {
 } from "./_lib/pipeline";
 
 /**
- * The §8 dashboard as HTML — the web twin of the CLI's text renderer
- * (apps/cli/src/ui/dashboard.ts): three category sections with the exact
+ * The §8 dashboard as HTML: three category sections with the exact
  * per-row fields of MVP.md §8, native currency ("?" when unreported),
  * disabled screens shown with their missing capabilities (guardrail 4),
  * and research-candidates framing throughout.
@@ -18,7 +17,7 @@ import {
  * Always rendered from live storage (force-dynamic): a cached page would
  * present stale data as fresh. The `new Date()` below is one of the
  * sanctioned wall-clock reads — they live only in the composition-root
- * entrypoints (this page, the cron route, and the CLI); everything below
+ * entrypoints (this page and the cron route); everything below
  * takes the injected as-of date (guardrail 2).
  */
 export const dynamic = "force-dynamic";

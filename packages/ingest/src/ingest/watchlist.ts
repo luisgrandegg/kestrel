@@ -18,8 +18,12 @@ import type { Instrument, IsoDate } from "@kestrel/core/types";
  */
 
 /**
- * Resolved against process.cwd(): intended for repo-root invocation (the
- * scheduled Action). Other runners pass an explicit path (backlog 019).
+ * Resolved against process.cwd() (repo-root invocation). The deployed web
+ * app does not use this loader — it bundles watchlist.json at build time
+ * and normalizes it inline (there is no repo-root cwd in a serverless
+ * function). `loadWatchlist` is retained as the file-based reference loader
+ * with its contract tests until backlog 021 retires watchlist.json for the
+ * per-user union ingestion; callers may still pass an explicit path.
  */
 export const DEFAULT_WATCHLIST_PATH = "watchlist.json";
 

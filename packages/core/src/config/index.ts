@@ -93,10 +93,13 @@ export const defaultConfig: KestrelConfig = deepFreeze({
 });
 
 /**
- * Resolved against process.cwd(): intended for repo-root invocation. Note
- * the sharp edge: with the implicit default path, a missing file silently
- * means "no overrides" — runners started elsewhere should pass explicit
- * paths (backlog 019).
+ * Resolved against process.cwd() (repo-root invocation). Note the sharp
+ * edge: with the implicit default path, a missing file silently means "no
+ * overrides" — a caller started elsewhere should pass an explicit path. The
+ * deployed web app does not use this file loader at all: with no repo-root
+ * cwd on Vercel it reads overrides from the KESTREL_CONFIG env var
+ * (ADR-0011); this loader is retained as the file-based reference with its
+ * contract tests.
  */
 export const DEFAULT_CONFIG_PATH = "kestrel.config.json";
 
