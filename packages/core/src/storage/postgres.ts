@@ -35,7 +35,7 @@ import {
  * Talks to the database only through the driver-agnostic {@link SqlExecutor}
  * seam (./executor.ts), so this module — and @kestrel/core — has no driver
  * dependency: the contract tests adapt PGlite; the deployed composition
- * root (apps/web, not yet landed) will adapt `pg.Pool` over Supabase's
+ * root (apps/web/src/app/_lib/db.ts) adapts `pg.Pool` over Supabase's
  * pooled connection string. Batch atomicity (insertCloses) is the only
  * transactional guarantee — it runs a top-level transaction on a pooled
  * connection, so callers must never wrap repository calls in an outer

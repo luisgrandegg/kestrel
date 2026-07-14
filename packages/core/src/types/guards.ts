@@ -49,6 +49,19 @@ export function assertIsoDate(name: string, value: string): void {
 }
 
 /**
+ * UTC calendar date (IsoDate) of an instant — the daily run's dedupe key
+ * (MVP.md §7: "dedupe by date so weekends/holidays add nothing"). Pure
+ * conversion so the sanctioned wall-clock reads stay confined to the
+ * composition-root entrypoints (the CLI in apps/cli/src/app/cli.ts and
+ * apps/web's page/route handlers); everything below them takes an injected
+ * IsoDate (guardrail 2). Typed as `string` (= IsoDate) only because this
+ * module is the import-nothing leaf and may not reach ./index.js.
+ */
+export function utcIsoDate(instant: Date): string {
+  return instant.toISOString().slice(0, 10);
+}
+
+/**
  * Days since the UTC epoch for a validated ISO date — the one shared
  * parser for calendar arithmetic (metrics' daysToEvent, ingestion's
  * addDays), so date strictness can never diverge between layers. Parses

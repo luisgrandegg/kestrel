@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { utcIsoDate } from "./clock.js";
+import { utcIsoDate } from "./guards.js";
 
 describe("utcIsoDate — the daily run's dedupe key", () => {
   it("converts an instant to its UTC calendar date, not the local one", () => {

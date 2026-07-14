@@ -113,6 +113,8 @@ function table(headers: readonly string[], rows: string[][]): string[] {
   return [render(headers), ...rows.map(render)];
 }
 
+// TWIN: apps/web/src/app/_lib/format.ts carries deliberate copies of
+// these two formatters (apps cannot import apps); keep them in sync.
 function percent(ratio: number): string {
   return `${(ratio * 100).toFixed(1)}%`;
 }

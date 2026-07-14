@@ -4,10 +4,10 @@ import { Repository } from "@kestrel/core/storage/repository";
 import type { IsoDate } from "@kestrel/core/types";
 import { type DailyReport, runDaily } from "@kestrel/ingest/ingest/daily";
 import { loadWatchlist } from "@kestrel/ingest/ingest/watchlist";
+import { activeProviders } from "@kestrel/ingest/providers/active";
 import type { Provider } from "@kestrel/ingest/providers/provider";
 import { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 import { buildDashboard } from "./dashboard.js";
-import { activeProviders } from "./providers.js";
 
 /**
  * The daily pipeline (backlog item 019, M7): throttled ingestion (when a

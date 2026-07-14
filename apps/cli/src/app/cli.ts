@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { utcIsoDate } from "./clock.js";
+import { utcIsoDate } from "@kestrel/core/types/guards";
 import { runDailyPipeline } from "./main.js";
 
 /**
@@ -8,10 +8,11 @@ import { runDailyPipeline } from "./main.js";
  *
  *   node apps/cli/dist/cli.js [dbPath] [watchlistPath] [dashboardPath] [configPath]
  *
- * The `new Date()` below is the one sanctioned wall-clock read in the
- * codebase: it becomes the run's UTC calendar date and is injected
- * downward — everything under @kestrel/ingest and app/ takes an explicit
- * IsoDate (guardrail 2).
+ * The `new Date()` below is one of the sanctioned wall-clock reads in the
+ * codebase — they live only in the composition-root entrypoints (this CLI
+ * and apps/web's page/route handlers): it becomes the run's UTC calendar
+ * date and is injected downward — everything under @kestrel/ingest and
+ * app/ takes an explicit IsoDate (guardrail 2).
  */
 const [
   dbPath = "data/kestrel.db",

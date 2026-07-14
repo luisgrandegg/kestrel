@@ -29,8 +29,9 @@ providers → ingest → storage → metrics → screens → ui
   overwrite, and every read can be bounded by an explicit as-of date — so
   any screen result is reproducible after the fact.
 - **No lookahead.** Metrics and screens see only data observed on or before
-  the as-of date. The one wall-clock read in the codebase lives in the CLI
-  entrypoint; everything below it takes an injected date.
+  the as-of date. The sanctioned wall-clock reads live in the
+  composition-root entrypoints (the CLI entrypoint and the web app's
+  page/route handlers); everything below them takes an injected date.
 - **Capabilities gate screens.** A screen whose data needs aren't served by
   an active provider renders a visible "unavailable — missing capability: X"
   state. It is never hidden and never fed fabricated or stale data.
@@ -68,7 +69,7 @@ Requires Node ≥ 22.13 and pnpm.
 
 ```sh
 pnpm install
-pnpm test        # 171 tests
+pnpm test        # 208 tests
 pnpm lint        # biome + dependency-cruiser seam rules
 pnpm typecheck
 pnpm daily       # build + run the daily pipeline locally
@@ -109,11 +110,22 @@ UTC (well after the US close, tolerant of cron lag; same-day re-runs are
 byte-identical no-ops) and commits the SQLite database and rendered
 dashboard back to the repo.
 
+## Deployment
+
+The hosted target (ADR-0011) is the Next.js dashboard in `apps/web` on
+Vercel, reading Supabase Postgres through the same storage seam, with the
+ingest worker run by the app via a Vercel-Cron-invoked route
+(`/api/ingest`, same 23:30 UTC slot). Step-by-step setup — Supabase
+project + migration, Vercel import, `DATABASE_URL`/`CRON_SECRET`/
+`KESTREL_CONFIG` env vars, cron verification — lives in
+[`docs/deploy.md`](docs/deploy.md).
+
 ## Repository map
 
 A pnpm/Turborepo workspace (ADR-0011): the workspace dependency direction is
-`@kestrel/core` ← `@kestrel/ingest` ← `@kestrel/cli`, and packages consume
-each other as TypeScript source via package.json `exports`.
+`@kestrel/core` ← `@kestrel/ingest` ← the apps (`@kestrel/cli`,
+`@kestrel/web`), and packages consume each other as TypeScript source via
+package.json `exports`.
 
 ```
 packages/
@@ -130,8 +142,9 @@ packages/
       test-support/  test-only fixtures (outside the seam graph)
   ingest/          @kestrel/ingest — the worker library (depends on core)
     src/
-      providers/   Provider interface, capability registry (adapters plug
-                   in here)
+      providers/   Provider interface, capability registry, and the active
+                   adapter set (active.ts — adapters plug in here, once,
+                   for every composition root)
       ingest/      backfill + daily refresh (state machine, throttle,
                    watchlist)
       test-support/  test-only fixtures (outside the seam graph)
@@ -140,6 +153,10 @@ apps/
     src/
       app/         harness, pipeline, CLI entrypoint
       ui/          dashboard renderer (pure text)
+  web/             @kestrel/web — the hosted composition root (ADR-0011):
+    src/           Next.js dashboard on Vercel over Supabase Postgres
+      app/         page (HTML dashboard), /api/ingest cron route, and
+                   _lib/ composition glue (pg-pool executor, pipeline)
 supabase/
   migrations/ Postgres schema — the SQL twin of storage/schema.ts; the
               repository contract tests run against both engines

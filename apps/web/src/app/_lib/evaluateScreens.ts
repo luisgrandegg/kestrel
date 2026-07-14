@@ -9,13 +9,12 @@ import type {
 import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 
 /**
- * Screen evaluation harness (backlog item 014) — composition-root code.
- * TWIN: apps/web/src/app/_lib/evaluateScreens.ts carries a deliberate
- * copy (apps cannot import apps); keep the two in sync.
- *
- * This is the composition root that
- * may import both screens/ and providers/ (recorded on the backlog item;
- * the boundary lint pins apps/cli/src/app/ as the top of the graph).
+ * Screen evaluation harness — the web composition root's twin of
+ * apps/cli/src/app/evaluateScreens.ts (keep the two in sync). Duplicated
+ * rather than shared because this harness is composition-root code — the
+ * one kind of module allowed to import both screens/ and providers/
+ * (registry) — and apps cannot import apps; hoisting it into a package
+ * would force screens/ and providers/ to meet below the composition roots.
  *
  * Given the repository and an explicit as-of date, it builds each ready
  * instrument's snapshot from storage, consults the registry, and evaluates
@@ -28,14 +27,7 @@ import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
  * asOf — no lookahead. The INSTRUMENT SET, however, reflects current
  * lifecycle state (`ready` is mutable ingestion bookkeeping with no as-of
  * history), so a historical evaluation omits instruments whose state
- * changed after that date. Fine for the MVP dashboard; a limitation for
- * point-in-time backtests.
- *
- * The split into buildSnapshots + evaluateScreen lets a caller with
- * heterogeneous screens (the three categories have distinct match shapes)
- * evaluate each screen with its own Match type over ONE set of snapshots —
- * no union casts, no repeated I/O. evaluateScreens is the convenience
- * wrapper for a homogeneous list.
+ * changed after that date.
  */
 
 /** Read every ready instrument's evaluation inputs, bounded by asOf. */
@@ -72,30 +64,11 @@ export function evaluateScreen<Match>(
 }
 
 /**
- * Convenience wrapper: evaluate a homogeneous list of screens. Snapshots
- * are only read from storage when at least one screen is enabled — a fully
- * disabled run does no per-instrument I/O.
- */
-export async function evaluateScreens<Match>(
-  repo: StorageRepository,
-  registry: ProviderRegistry,
-  config: KestrelConfig,
-  screens: readonly Screen<Match>[],
-  asOf: IsoDate,
-): Promise<ScreenEvaluation<Match>[]> {
-  const anyEnabled = screens.some(
-    (screen) => registry.resolveScreen(screen.requiredCapabilities).enabled,
-  );
-  const snapshots = anyEnabled ? await buildSnapshots(repo, config, asOf) : [];
-  return screens.map((screen) => evaluateScreen(snapshots, registry, screen));
-}
-
-/**
  * Read one instrument's evaluation inputs from storage, bounded by asOf.
  * An instrument with no close on or before asOf has no data in the
- * evaluation window (e.g. a backtest date before its history) — skipped.
- * The latest close is the tail of the lookback window (lookbackTradingDays
- * is validated >= 2), not a separate query.
+ * evaluation window — skipped. The latest close is the tail of the
+ * lookback window (lookbackTradingDays is validated >= 2), not a separate
+ * query.
  */
 async function buildSnapshot(
   repo: StorageRepository,
