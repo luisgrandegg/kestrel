@@ -10,13 +10,14 @@ sign-in is via better-auth with Google (item 020).
 ## 1. Create the Supabase project
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. Apply the migrations in `supabase/migrations/` — `00001_init.sql` (market
-   data) and `00002_auth.sql` (better-auth's `user`/`session`/`account`/
-   `verification` tables, item 020), in order:
+2. Apply the migrations in `supabase/migrations/`, in filename order —
+   `00001_init.sql` (market data), `00002_auth.sql` (better-auth's
+   `user`/`session`/`account`/`verification` tables, item 020), and
+   `00003_user_watchlist.sql` (per-user watchlists, item 021):
    - **SQL editor:** paste each file's contents into the Supabase dashboard's
      SQL editor and run them in filename order; or
    - **supabase CLI:** link the repo (`supabase link --project-ref <ref>`)
-     and run `supabase db push` (both migrations live in the conventional
+     and run `supabase db push` (all migrations live in the conventional
      `supabase/migrations/` directory).
 3. Copy the **Transaction pooler** connection string (Project settings →
    Database → Connection string → Transaction pooler, port 6543) and
@@ -37,8 +38,8 @@ sign-in is via better-auth with Google (item 020).
 
 1. Vercel → Add New Project → import the GitHub repo.
 2. **Root Directory:** `apps/web` — and enable **"Include source files
-   outside of the Root Directory"** (the app consumes `@kestrel/core`,
-   `@kestrel/ingest`, and the repo-root `watchlist.json` as source).
+   outside of the Root Directory"** (the app consumes `@kestrel/core` and
+   `@kestrel/ingest` as source).
 3. Framework preset: **Next.js** (auto-detected). pnpm is detected from the
    lockfile; no custom build command needed.
 
@@ -104,15 +105,15 @@ self-signed certificate in the chain, either supply Supabase's CA
 `?sslmode=no-verify` (encrypted, unverified — still strictly better than
 plaintext).
 
-## 5c. Watchlist changes need a redeploy
+## 5c. Watchlists are per-user, managed in the app
 
-The web app bundles `watchlist.json` at build time (there is no repo
-checkout inside a serverless function), so **editing the watchlist takes
-effect on the next Vercel deployment**, not the next cron fire. Pushing
-the edit to the connected branch triggers that deploy automatically; a
-rollback or skipped build keeps serving the old list. (Backlog item 021
-retires the bundled file, moving the watchlist behind the storage seam as
-per-user rows queried live.)
+Since item 021 (ADR-0013) the watchlist is per-user, stored in Supabase
+behind the storage seam (`user_watchlist`) — there is no bundled
+`watchlist.json` and no redeploy needed. A signed-in user adds/removes
+tickers on the dashboard; adding one kicks an immediate throttled backfill,
+and the daily cron ingests the **union** of every user's tickers (each
+fetched once). A ticker nobody tracks is not ingested; its stored history is
+retained (append-only).
 
 ## 6. Authentication (Google sign-in)
 

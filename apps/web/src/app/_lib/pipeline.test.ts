@@ -4,7 +4,7 @@ import { Repository } from "@kestrel/core/storage/repository";
 import { ProviderRegistry } from "@kestrel/ingest/providers/registry";
 import { providerWith } from "@kestrel/ingest/test-support/fakeProvider";
 import { describe, expect, it } from "vitest";
-import { configFromEnv, getDashboardData, watchlist } from "./pipeline";
+import { configFromEnv, getDashboardData } from "./pipeline";
 
 const ASOF = "2026-07-31";
 
@@ -57,7 +57,9 @@ describe("getDashboardData — storage to typed screen evaluations", () => {
       ),
     ]);
 
-    const data = await getDashboardData(repo, registry, resolveConfig(), ASOF);
+    const data = await getDashboardData(repo, registry, resolveConfig(), ASOF, [
+      "ACME",
+    ]);
 
     expect(data.asOf).toBe(ASOF);
     expect(data.category1.resolution.enabled).toBe(true);
@@ -96,7 +98,9 @@ describe("getDashboardData — storage to typed screen evaluations", () => {
       providerWith("closes", "analystTargets"),
     ]);
 
-    const data = await getDashboardData(repo, registry, resolveConfig(), ASOF);
+    const data = await getDashboardData(repo, registry, resolveConfig(), ASOF, [
+      "ACME",
+    ]);
 
     expect(data.category1.matches).toHaveLength(1); // still evaluates
     expect(data.category2.resolution).toEqual({
@@ -119,6 +123,7 @@ describe("getDashboardData — storage to typed screen evaluations", () => {
       new ProviderRegistry([]),
       resolveConfig(),
       ASOF,
+      ["ACME"],
     );
 
     for (const evaluation of [data.category1, data.category2, data.category3]) {
@@ -163,13 +168,68 @@ describe("configFromEnv — the KESTREL_CONFIG override path", () => {
   });
 });
 
-describe("watchlist — bundled from the repo-root watchlist.json", () => {
-  it("returns normalized, deduped tickers", () => {
-    const tickers = watchlist();
-    expect(tickers.length).toBeGreaterThan(0);
-    expect(new Set(tickers).size).toBe(tickers.length);
-    for (const ticker of tickers) {
-      expect(ticker).toBe(ticker.trim().toUpperCase());
+describe("getDashboardData — per-user ticker set over shared data (item 021)", () => {
+  // Two ready instruments sharing the same market-data engine; the only thing
+  // that differs between "users" is which ticker SET is passed.
+  const seedTwo = async (repo: StorageRepository): Promise<void> => {
+    for (const ticker of ["ACME", "WIDG"] as const) {
+      await repo.addInstrument(ticker, "2026-01-01");
+      await repo.insertAnalystSnapshot({
+        ticker,
+        asOf: ASOF,
+        medianTarget: 142.5, // vs close 114: 25% upside
+        numAnalysts: 8,
+      });
+      await repo.insertCloses(
+        [100, 112, 98, 113, 99, 114].map((close, i) => ({
+          ticker,
+          date: `2026-07-${String(i + 1).padStart(2, "0")}`,
+          close,
+        })),
+      );
+      await repo.setInstrumentState(ticker, "ready");
     }
+  };
+  const registry = (): ProviderRegistry =>
+    new ProviderRegistry([providerWith("closes", "analystTargets")]);
+
+  it("two users with different watchlists see different matches over the SAME stored data", async () => {
+    const repo = new Repository(":memory:");
+    await seedTwo(repo);
+
+    const userA = await getDashboardData(
+      repo,
+      registry(),
+      resolveConfig(),
+      ASOF,
+      ["ACME"],
+    );
+    const userB = await getDashboardData(
+      repo,
+      registry(),
+      resolveConfig(),
+      ASOF,
+      ["WIDG"],
+    );
+
+    expect(userA.category1.matches.map((m) => m.ticker)).toEqual(["ACME"]);
+    expect(userB.category1.matches.map((m) => m.ticker)).toEqual(["WIDG"]);
+  });
+
+  it("an empty watchlist yields no matches (the empty-state UI takes over)", async () => {
+    const repo = new Repository(":memory:");
+    await seedTwo(repo);
+
+    const data = await getDashboardData(
+      repo,
+      registry(),
+      resolveConfig(),
+      ASOF,
+      [],
+    );
+    expect(data.category1.matches).toEqual([]);
+    // Screens are still ENABLED (a provider serves the capability) — the user
+    // simply tracks nothing yet.
+    expect(data.category1.resolution.enabled).toBe(true);
   });
 });

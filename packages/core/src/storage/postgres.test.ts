@@ -17,10 +17,14 @@ import { PostgresRepository } from "./postgres.js";
  * of truth for the Postgres schema — so every test starts clean.
  */
 
-const MIGRATION = readFileSync(
-  new URL("../../../../supabase/migrations/00001_init.sql", import.meta.url),
-  "utf8",
-);
+// The storage-seam migrations (00001 market data + 00003 user watchlists).
+// 00002 is better-auth's own schema — beside this seam, not part of the port.
+const MIGRATION = [
+  "../../../../supabase/migrations/00001_init.sql",
+  "../../../../supabase/migrations/00003_user_watchlist.sql",
+]
+  .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+  .join("\n");
 
 const TABLES = [
   "instruments",
@@ -28,6 +32,7 @@ const TABLES = [
   "analyst_snapshots",
   "earnings_snapshots",
   "dividend_snapshots",
+  "user_watchlist",
 ];
 
 const db = new PGlite();

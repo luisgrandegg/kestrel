@@ -62,15 +62,17 @@ Vercel-Cron route. The standalone CLI and the SQLite-committing GitHub Action
 have been retired (ADR-0013); the SQLite repository survives only as the fast
 reference engine that proves the storage port in the contract tests.
 
-The dashboard is **private** (item 020, ADR-0013): sign-in is via
-[better-auth](https://better-auth.com) with Google, and users are
-auto-created on first sign-in (identities linked by verified email). A method
-whose OAuth secrets are absent is not offered — the sign-in page says so
-honestly rather than showing a broken button. Session durations come from
-config (`auth.sessionAbsoluteHours`/`sessionSlidingHours`). Per-user
-watchlists come next (item 021); for now every signed-in user sees the shared
-watchlist's screens. See [`docs/deploy.md`](docs/deploy.md) for the Google +
-`BETTER_AUTH_*` setup.
+The dashboard is **private** and **per-user** (items 020–021, ADR-0013):
+sign-in is via [better-auth](https://better-auth.com) with Google, and users
+are auto-created on first sign-in (identities linked by verified email). A
+method whose OAuth secrets are absent is not offered — the sign-in page says
+so honestly rather than showing a broken button. Session durations come from
+config (`auth.sessionAbsoluteHours`/`sessionSlidingHours`). Each user manages
+their own watchlist in the app (adding a ticker kicks an immediate backfill);
+the **market data is shared** and ingested once per ticker, with the daily
+cron fetching the **union** of everyone's tickers. Config/thresholds stay
+global. See [`docs/deploy.md`](docs/deploy.md) for the Google + `BETTER_AUTH_*`
+setup.
 
 **Live:** the Yahoo adapter is registered in
 `packages/ingest/src/providers/active.ts`, so scheduled runs ingest live
@@ -119,9 +121,11 @@ silently falls back to defaults.
 
 ## The watchlist
 
-`watchlist.json` at the repo root. See
-[`docs/watchlist.md`](docs/watchlist.md) for how additions, removals, and
-the backfill lifecycle behave.
+Each signed-in user manages their own watchlist in the app (item 021) —
+stored behind the storage seam (`user_watchlist`), not a committed file.
+Adding a ticker kicks an immediate backfill; the daily cron ingests the
+union of every user's tickers. See [`docs/watchlist.md`](docs/watchlist.md)
+for how additions, removals, and the backfill lifecycle behave.
 
 ## Scheduled ingestion
 
@@ -172,14 +176,16 @@ packages/
 apps/
   web/             @kestrel/web — the sole composition root (ADR-0011, 0013):
     src/           Next.js dashboard on Vercel over Supabase Postgres
-      app/         page (private HTML dashboard) + sign-in page + api/ingest
-                   cron route + api/auth/* (better-auth) = presentation;
-                   _lib/ composition glue (pg-pool executor, pipeline,
-                   screen-evaluation harness, formatters, auth instance)
+      app/         page (private, per-user dashboard) + sign-in page +
+                   watchlist manager + api/ingest cron route + api/auth/*
+                   (better-auth) = presentation; _lib/ composition glue
+                   (pg-pool executor, pipeline, screen-evaluation harness,
+                   formatters, auth instance, watchlist server actions)
 supabase/
   migrations/ 00001_init.sql (market data — the SQL twin of storage/schema.ts;
-              the repository contract tests run against both engines) +
-              00002_auth.sql (better-auth's own user/session/account tables)
+              the repository contract tests run against both engines),
+              00002_auth.sql (better-auth's own user/session/account tables),
+              00003_user_watchlist.sql (per-user watchlists)
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)

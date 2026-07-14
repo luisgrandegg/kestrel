@@ -417,4 +417,66 @@ export function describeRepositoryContract(
       expect(await r.listInstruments("error")).toEqual([]);
     });
   });
+
+  describe(`${engine}: user watchlists — per-user membership (item 021)`, () => {
+    it("adds tickers to a user's watchlist; re-adding is a no-op", async () => {
+      const r = await repo();
+      await r.addToWatchlist("user-1", "AAA", "2026-07-10");
+      await r.addToWatchlist("user-1", "BBB", "2026-07-11");
+      // Re-add with a different addedAt — still one row, insert-or-ignore.
+      await r.addToWatchlist("user-1", "AAA", "2026-07-12");
+      expect(await r.getUserWatchlist("user-1")).toEqual(["AAA", "BBB"]);
+    });
+
+    it("keeps each user's watchlist separate", async () => {
+      const r = await repo();
+      await r.addToWatchlist("user-1", "AAA", "2026-07-10");
+      await r.addToWatchlist("user-2", "BBB", "2026-07-10");
+      expect(await r.getUserWatchlist("user-1")).toEqual(["AAA"]);
+      expect(await r.getUserWatchlist("user-2")).toEqual(["BBB"]);
+      expect(await r.getUserWatchlist("user-unknown")).toEqual([]);
+    });
+
+    it("removes a ticker for one user only; removing an absent row is a no-op", async () => {
+      const r = await repo();
+      await r.addToWatchlist("user-1", "AAA", "2026-07-10");
+      await r.addToWatchlist("user-2", "AAA", "2026-07-10");
+      await r.removeFromWatchlist("user-1", "AAA");
+      await r.removeFromWatchlist("user-1", "AAA"); // idempotent
+      expect(await r.getUserWatchlist("user-1")).toEqual([]);
+      // user-2 still tracks it.
+      expect(await r.getUserWatchlist("user-2")).toEqual(["AAA"]);
+    });
+
+    it("getAllWatchlistedTickers returns the deduped union, sorted (byte order, both engines)", async () => {
+      const r = await repo();
+      await r.addToWatchlist("user-1", "BBB", "2026-07-10");
+      await r.addToWatchlist("user-1", "AAA", "2026-07-10");
+      await r.addToWatchlist("user-2", "AAA", "2026-07-10"); // shared
+      await r.addToWatchlist("user-2", "CCC", "2026-07-10");
+      // A punctuated ticker pins engine-independent (byte-order) sorting: '.'
+      // (0x2E) sorts before letters, so BF.A < BFB — SQLite BINARY and
+      // Postgres COLLATE "C" must agree.
+      await r.addToWatchlist("user-2", "BFB", "2026-07-10");
+      await r.addToWatchlist("user-1", "BF.A", "2026-07-10");
+      // AAA appears once despite two watchers; sorted by byte order.
+      expect(await r.getAllWatchlistedTickers()).toEqual([
+        "AAA",
+        "BBB",
+        "BF.A",
+        "BFB",
+        "CCC",
+      ]);
+    });
+
+    it("a ticker with no watchers left drops out of the union (but is not deleted from history)", async () => {
+      const r = await repo();
+      await r.addToWatchlist("user-1", "AAA", "2026-07-10");
+      await r.addToWatchlist("user-2", "AAA", "2026-07-10");
+      await r.removeFromWatchlist("user-1", "AAA");
+      expect(await r.getAllWatchlistedTickers()).toEqual(["AAA"]); // user-2 holds
+      await r.removeFromWatchlist("user-2", "AAA");
+      expect(await r.getAllWatchlistedTickers()).toEqual([]); // nobody holds
+    });
+  });
 }

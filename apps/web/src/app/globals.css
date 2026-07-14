@@ -114,3 +114,59 @@ button:disabled {
   opacity: 0.6;
   cursor: default;
 }
+
+.watchlist {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--accent-bg);
+}
+
+.tickers {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tickers li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+}
+
+.tickers .ticker {
+  font-weight: 500;
+}
+
+.tickers button {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.add-ticker {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.add-ticker input {
+  font: inherit;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: inherit;
+}
+
+.error {
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+}

@@ -1,51 +1,6 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Repository } from "@kestrel/core/storage/repository";
 import { describe, expect, it } from "vitest";
-import {
-  loadWatchlist,
-  registerWatchlist,
-  syncableInstruments,
-} from "./watchlist.js";
-
-const tempFile = (content: string): string => {
-  const path = join(
-    mkdtempSync(join(tmpdir(), "kestrel-watchlist-")),
-    "watchlist.json",
-  );
-  writeFileSync(path, content);
-  return path;
-};
-
-describe("loadWatchlist", () => {
-  it("loads, trims, uppercases, and dedupes tickers, preserving order", () => {
-    const path = tempFile(JSON.stringify(["aapl", " MSFT ", "AAPL", "bmw.de"]));
-    expect(loadWatchlist(path)).toEqual(["AAPL", "MSFT", "BMW.DE"]);
-  });
-
-  it("an empty watchlist is valid", () => {
-    expect(loadWatchlist(tempFile("[]"))).toEqual([]);
-  });
-
-  it("fails loudly on missing files, bad JSON, and bad entries", () => {
-    expect(() => loadWatchlist("/nonexistent/watchlist.json")).toThrow(
-      /not readable/,
-    );
-    expect(() => loadWatchlist(tempFile("{ not json"))).toThrow(
-      /not valid JSON/,
-    );
-    expect(() => loadWatchlist(tempFile('{"tickers": []}'))).toThrow(
-      /must be a JSON array/,
-    );
-    expect(() => loadWatchlist(tempFile('["AAPL", 42]'))).toThrow(
-      /non-empty ticker strings/,
-    );
-    expect(() => loadWatchlist(tempFile('["AAPL", "  "]'))).toThrow(
-      /non-empty ticker strings/,
-    );
-  });
-});
+import { registerWatchlist, syncableInstruments } from "./watchlist.js";
 
 describe("registerWatchlist + syncableInstruments", () => {
   it("normalizes raw-cased inputs so no duplicate rows or empty intersections arise", async () => {

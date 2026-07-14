@@ -78,6 +78,44 @@ export class Repository implements StorageRepository {
       .get(ticker) as unknown as Instrument | undefined;
   }
 
+  // ---- user watchlists (per-user bookkeeping, not observations) ----
+
+  async addToWatchlist(
+    userId: string,
+    ticker: string,
+    addedAt: IsoDate,
+  ): Promise<void> {
+    this.db
+      .prepare(
+        "INSERT INTO user_watchlist (user_id, ticker, added_at) VALUES (?, ?, ?) ON CONFLICT(user_id, ticker) DO NOTHING",
+      )
+      .run(userId, ticker, addedAt);
+  }
+
+  async removeFromWatchlist(userId: string, ticker: string): Promise<void> {
+    this.db
+      .prepare("DELETE FROM user_watchlist WHERE user_id = ? AND ticker = ?")
+      .run(userId, ticker);
+  }
+
+  async getUserWatchlist(userId: string): Promise<string[]> {
+    return (
+      this.db
+        .prepare(
+          "SELECT ticker FROM user_watchlist WHERE user_id = ? ORDER BY ticker",
+        )
+        .all(userId) as Array<{ ticker: string }>
+    ).map((row) => row.ticker);
+  }
+
+  async getAllWatchlistedTickers(): Promise<string[]> {
+    return (
+      this.db
+        .prepare("SELECT DISTINCT ticker FROM user_watchlist ORDER BY ticker")
+        .all() as Array<{ ticker: string }>
+    ).map((row) => row.ticker);
+  }
+
   async listInstruments(state?: InstrumentState): Promise<Instrument[]> {
     return this.db
       .prepare(

@@ -15,8 +15,17 @@
  *   ingestion writes nothing), not a null column — so this schema stands.
  *
  * Observations (prices, snapshots) are append-only: the repository exposes
- * no UPDATE or DELETE for them (CONSTITUTION.md §3.1). `instruments` is the
- * one mutable table — it holds ingestion bookkeeping, not observations.
+ * no UPDATE or DELETE for them (CONSTITUTION.md §3.1). `instruments` and
+ * `user_watchlist` are the mutable tables — they hold bookkeeping (ingestion
+ * lifecycle; per-user membership), not observations.
+ *
+ * `user_watchlist` (backlog item 021, ADR-0013): which user tracks which
+ * ticker. `user_id` holds better-auth's user id as a plain column — a
+ * LOGICAL reference, not a cross-schema foreign key: auth's tables live
+ * beside this storage seam (ADR-0013) and do not exist in this SQLite
+ * reference engine, so a real FK could not be enforced under the two-engine
+ * contract. Membership is mutable, so removal DELETEs the row (it is not an
+ * append-only observation); the ticker's price/snapshot history is retained.
  */
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS instruments (
@@ -56,5 +65,12 @@ CREATE TABLE IF NOT EXISTS dividend_snapshots (
   as_of TEXT NOT NULL,
   next_ex_div_date TEXT,
   PRIMARY KEY (ticker, as_of)
+);
+
+CREATE TABLE IF NOT EXISTS user_watchlist (
+  user_id TEXT NOT NULL,
+  ticker TEXT NOT NULL,
+  added_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, ticker)
 );
 `;

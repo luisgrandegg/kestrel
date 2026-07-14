@@ -47,15 +47,25 @@ and is ingested once per ticker. Config/thresholds remain global.
 
 ## Acceptance criteria
 
-- [ ] `user_watchlist` store contract green on SQLite and PGlite-Postgres.
-- [ ] Two users with different watchlists see different dashboards over the
-      SAME shared price/snapshot data (fixture test through the harness).
-- [ ] Union ingestion fetches each ticker once regardless of how many users
-      track it; a ticker tracked by nobody is not ingested (test).
-- [ ] Adding a ticker kicks its backfill immediately; the on-add path and
-      the cron are mutually idempotent (adding then a cron run does not
-      duplicate; test).
-- [ ] Dropping the last hold on a ticker stops ingestion but retains its
-      stored history (append-only).
-- [ ] Add/remove UI works end-to-end on a preview; per-user isolation holds
-      (a user cannot see or edit another's watchlist).
+- [x] `user_watchlist` store contract green on SQLite and PGlite-Postgres
+      (the `describeRepositoryContract` suite runs the new methods on both).
+- [x] Two users with different watchlists see different dashboards over the
+      SAME shared price/snapshot data (fixture test through `getDashboardData`
+      in `pipeline.test.ts`).
+- [x] Union ingestion fetches each ticker once regardless of how many users
+      track it; a ticker tracked by nobody is not ingested. `runIngestion`
+      drives off `getAllWatchlistedTickers`, whose contract test proves the
+      deduped union and that a ticker with no watchers is absent.
+- [x] Adding a ticker kicks its backfill immediately (`addTicker` →
+      `kickBackfill` runs the throttled daily pipeline over `[ticker]`). The
+      on-add path and the cron are mutually idempotent by construction — both
+      go through the same insert-or-ignore `runDaily`, whose overlapping-refetch
+      idempotency is pinned in `backfill.test.ts`.
+- [x] Dropping the last hold on a ticker stops ingestion but retains its
+      stored history — contract test (ticker drops out of the union) plus the
+      existing "removal never deletes stored history" watchlist test.
+- [ ] **(manual — verify on the deployed preview)** Add/remove UI works
+      end-to-end. Per-user isolation holds BY CONSTRUCTION: the add/remove
+      server actions resolve the caller's own `userId` from the better-auth
+      session and only ever mutate that user's rows — a user cannot name
+      another's watchlist. The live click-through is the preview check.
