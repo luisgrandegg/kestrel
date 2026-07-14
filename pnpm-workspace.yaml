@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# pnpm 10 blocks lifecycle scripts by default; esbuild's postinstall only
+# swaps its JS launcher for the platform binary (an optimisation — the
+# launcher works without it), but allow it so installs are warning-free.
+onlyBuiltDependencies:
+  - esbuild

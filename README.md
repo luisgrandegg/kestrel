@@ -73,7 +73,7 @@ pnpm typecheck
 pnpm daily       # build + run the daily pipeline locally
 ```
 
-The daily entrypoint (`node dist/app/cli.js [dbPath] [watchlistPath]
+The daily entrypoint (`node apps/cli/dist/cli.js [dbPath] [watchlistPath]
 [dashboardPath] [configPath]`) ingests (when a provider is active), then
 writes the rendered dashboard to `dashboard.md` and prints it.
 
@@ -110,19 +110,34 @@ dashboard back to the repo.
 
 ## Repository map
 
+A pnpm/Turborepo workspace (ADR-0011): the workspace dependency direction is
+`@kestrel/core` ← `@kestrel/ingest` ← `@kestrel/cli`, and packages consume
+each other as TypeScript source via package.json `exports`.
+
 ```
-src/
-  config/     §9 defaults + validated overrides
-  types/      shared DTOs, guards — the pure leaf every layer may import
-  metrics/    impliedUpside, completedFluctuations, daysToEvent (pure)
-  storage/    the seam contract (port) + SQLite repository — the only code
-              that touches the database; consumers type against the port
-  providers/  Provider interface, capability registry (adapters plug in here)
-  ingest/     backfill + daily refresh (state machine, throttle, watchlist)
-  screens/    the three category predicates + shared base predicate
-  ui/         dashboard renderer (pure text)
-  app/        composition root: harness, pipeline, CLI entrypoint
-  test-support/  test-only fixtures (outside the seam graph)
+packages/
+  core/            @kestrel/core — the pure domain (no workspace deps)
+    src/
+      config/      §9 defaults + validated overrides
+      types/       shared DTOs, guards — the pure leaf every layer may import
+      metrics/     impliedUpside, completedFluctuations, daysToEvent (pure)
+      storage/     the seam contract (port) + SQLite repository — the only
+                   code that touches the database; consumers type against
+                   the port
+      screens/     the three category predicates + shared base predicate
+      test-support/  test-only fixtures (outside the seam graph)
+  ingest/          @kestrel/ingest — the worker library (depends on core)
+    src/
+      providers/   Provider interface, capability registry (adapters plug
+                   in here)
+      ingest/      backfill + daily refresh (state machine, throttle,
+                   watchlist)
+      test-support/  test-only fixtures (outside the seam graph)
+apps/
+  cli/             @kestrel/cli — composition root (depends on core + ingest)
+    src/
+      app/         harness, pipeline, CLI entrypoint
+      ui/          dashboard renderer (pure text)
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)

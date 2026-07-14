@@ -1,16 +1,4 @@
 {
-  "compilerOptions": {
-    "target": "ES2023",
-    "lib": ["ES2023"],
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "types": ["node"],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "verbatimModuleSyntax": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true,
-    "noEmit": true
-  },
-  "include": ["src", "vitest.config.ts"]
+  "extends": "./tsconfig.base.json",
+  "include": ["vitest.config.ts"]
 }
