@@ -48,7 +48,9 @@ export async function runDailyPipeline(
   const log = options.log ?? (() => {});
   const config = loadConfig(options.configPath);
   const watchlist = loadWatchlist(options.watchlistPath);
-  const registry = new ProviderRegistry(options.providers ?? activeProviders());
+  const registry = new ProviderRegistry(
+    options.providers ?? activeProviders(() => options.today),
+  );
   const repo: StorageRepository = new Repository(options.dbPath);
   try {
     let report: DailyReport | null = null;
@@ -63,18 +65,32 @@ export async function runDailyPipeline(
         },
         watchlist,
       );
+      // Surface BOTH phases' provider failures: a run where every backfill
+      // fetch failed (e.g. the provider is unreachable) must never read as a
+      // quiet success — the failures are charged to each instrument's streak
+      // but would otherwise be invisible on stdout (guardrail 4, fail loud).
+      const totalFailures =
+        report.failures.length + report.backfill.failures.length;
+      const totalErrored =
+        report.errored.length + report.backfill.errored.length;
       log(
         `ingestion ${options.today}: refreshed ${report.refreshed.length}, ` +
           `metadata ${report.metadataRefreshed.length}, ` +
           `backfill processed ${report.backfill.processed.length} ` +
           `(promoted ${report.backfill.promoted.length}), ` +
-          `failures ${report.failures.length}, errored ${report.errored.length}, ` +
+          `failures ${totalFailures}, errored ${totalErrored}, ` +
           `skipped errored ${report.skippedErrored.length}`,
       );
+      for (const { ticker, message } of report.backfill.failures) {
+        log(`  backfill failure ${ticker}: ${message}`);
+      }
+      for (const { ticker, message } of report.failures) {
+        log(`  refresh failure ${ticker}: ${message}`);
+      }
     } else {
       log(
-        'no active provider serves "closes" — ingestion skipped (the Yahoo ' +
-          "adapter is backlog item 010); rendering from stored data only",
+        'no active provider serves "closes" — ingestion skipped; rendering ' +
+          "from stored data only",
       );
     }
     return {

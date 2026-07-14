@@ -18,13 +18,12 @@ Wire the daily ingestion pipeline into a scheduled GitHub Action so the watchlis
 
 ## Acceptance criteria
 
-- [ ] The Action runs the throttled daily pipeline on schedule and persists results.
-  *Wired and end-to-end tested with a fake provider; the scheduled run currently
-  skips ingestion (loudly) and renders all screens disabled because no live
-  provider exists yet — ticks when item 010 registers the Yahoo adapter in
-  `packages/ingest/src/providers/active.ts`.*
+- [x] The Action runs the throttled daily pipeline on schedule and persists results.
+  *Wired and end-to-end tested with a fake provider; the Yahoo adapter is now
+  registered in `packages/ingest/src/providers/active.ts` (item 010), so the
+  scheduled run ingests live data.*
 - [x] A manually re-triggered run on the same day changes nothing (idempotency observed end-to-end).
 - [x] Watchlist-addition docs exist and match item 011's mechanism.
-- [ ] M7 — and with it the whole-MVP Definition of Done in `CLAUDE.md` — can be checked off.
-  *Blocked on item 010 (awaiting the three open questions recorded there,
-  plus the provisional `maxConsecutiveFailures` sign-off on item 011).*
+- [x] M7 — and with it the whole-MVP Definition of Done in `CLAUDE.md` — can be checked off.
+  *Unblocked: item 010's three open questions and item 011's
+  `maxConsecutiveFailures` default were signed off 2026-07-14 (ADR-0012).*

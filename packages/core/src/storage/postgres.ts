@@ -96,9 +96,15 @@ export class PostgresRepository implements StorageRepository {
     );
   }
 
+  /**
+   * Stamp the native currency ONCE — COALESCE keeps an already-set value, so
+   * the copy-only invariant (ADR-0012 decision 3) is self-enforcing at the
+   * storage boundary (a known ticker still matches one row, preserving the
+   * unknown-instrument check). Twin of the SQLite repository.
+   */
   async setInstrumentCurrency(ticker: string, currency: string): Promise<void> {
     await this.updateInstrument(
-      "UPDATE instruments SET currency = $1 WHERE ticker = $2",
+      "UPDATE instruments SET currency = COALESCE(currency, $1) WHERE ticker = $2",
       currency,
       ticker,
     );

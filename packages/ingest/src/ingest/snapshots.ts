@@ -10,6 +10,10 @@ import type { Throttle } from "./throttle.js";
  * A capability served by no provider is skipped: the registry disables the
  * dependent screens, which is the sanctioned degradation path (guardrail 4)
  * — never fabrication. Stamps `last_metadata_sync` when done.
+ *
+ * Analyst coverage may be legitimately absent (ADR-0012 decision 2): a `null`
+ * return writes no snapshot but STILL stamps the metadata sync below, so an
+ * uncovered ticker is not refetched before its TTL and never error-loops.
  */
 export async function fetchMetadataSnapshots(
   registry: ProviderRegistry,
@@ -21,7 +25,10 @@ export async function fetchMetadataSnapshots(
   const analyst = registry.providersFor("analystTargets")[0];
   if (analyst?.getAnalystTargets !== undefined) {
     const fetch = analyst.getAnalystTargets.bind(analyst);
-    await repo.insertAnalystSnapshot(await throttle(() => fetch(ticker)));
+    const snapshot = await throttle(() => fetch(ticker));
+    if (snapshot !== null) {
+      await repo.insertAnalystSnapshot(snapshot);
+    }
   }
   const earnings = registry.providersFor("earningsCalendar")[0];
   if (earnings?.getNextEarnings !== undefined) {

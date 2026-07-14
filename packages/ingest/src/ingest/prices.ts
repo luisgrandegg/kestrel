@@ -9,6 +9,41 @@ export type FetchCloses = (
   to: IsoDate,
 ) => Promise<DailyClose[]>;
 
+export type FetchInstrumentInfo = (
+  ticker: string,
+) => Promise<{ ticker: string; currency: string }>;
+
+/**
+ * Copy an instrument's native trading currency from the closes provider into
+ * storage on first sync (ADR-0012 decision 3) — shared by backfill promotion
+ * and the daily refresh. Ingestion COPIES, never computes (CONSTITUTION.md
+ * §2.2): it only stamps what the provider reports. Callers invoke this solely
+ * while `currency` is NULL, so a known currency is never refetched. The fetch
+ * runs through the shared throttle, and a failure (or an echo/empty-currency
+ * violation) is a provider failure like any other — it feeds the streak.
+ */
+export async function syncInstrumentCurrency(
+  repo: StorageRepository,
+  fetchInfo: FetchInstrumentInfo,
+  throttle: Throttle,
+  ticker: string,
+): Promise<void> {
+  const info = await throttle(() => fetchInfo(ticker));
+  if (info.ticker !== ticker) {
+    throw new ProviderCallError(
+      new RangeError(
+        `provider returned instrument info for "${info.ticker}" when "${ticker}" was requested`,
+      ),
+    );
+  }
+  if (typeof info.currency !== "string" || info.currency.trim() === "") {
+    throw new ProviderCallError(
+      new RangeError(`provider returned an empty currency for ${ticker}`),
+    );
+  }
+  await repo.setInstrumentCurrency(ticker, info.currency);
+}
+
 /**
  * Fetch and store the missing slice of a ticker's price history — shared by
  * backfill (item 012) and the daily incremental refresh (item 013).

@@ -21,7 +21,22 @@ Capability mapping per `MVP.md` §2:
 - **Fail loud at the adapter edge:** malformed or partial Yahoo responses (missing target, missing dates, non-positive or non-finite closes) throw here, not three stages downstream. Storage is append-only, so a bad close that slips through can never be removed — the positivity contract on `DailyClose.close` must be enforced here.
 - No Yahoo field name, endpoint, or quirk escapes `providers/yahoo/` (lint-enforced by item 004).
 
-## Open questions — decide before building
+## Open questions — RESOLVED (owner, 2026-07-14; see ADR-0012)
+
+1. **`asOf` stamping** → the adapter takes an injected clock at construction
+   (`today: () => IsoDate`) and stamps every snapshot `asOf` with it. No
+   `Date.now()` in the adapter (option 1).
+2. **Missing vs. absent analyst target** → `getAnalystTargets` returns
+   `AnalystSnapshot | null`; `null` when Yahoo clearly reports no coverage
+   (ingestion writes no snapshot but still stamps `lastMetadataSync`). A
+   malformed response (coverage reported, no usable target) still throws
+   (a hybrid of options 1 and 2 — the snapshot is skipped, `medianTarget`
+   stays non-nullable).
+3. **Instrument currency** → a dedicated `Provider.getInstrumentInfo`
+   surface, required by the `closes` capability; ingestion copies it via
+   `setInstrumentCurrency` when currency is `NULL` (option 2 + 3).
+
+The original framing is retained below for provenance.
 
 ### 1. Who stamps `asOf` on snapshots?
 
@@ -37,8 +52,8 @@ This item's scope says adapters normalize "including instrument currency", but n
 
 ## Acceptance criteria
 
-- [ ] Contract tests against recorded/mocked `yahoo-finance2` responses for all four capabilities.
-- [ ] Malformed-response fixtures throw at the adapter boundary, tested.
-- [ ] Contract tests: the adapter echoes the requested ticker, returns zero-padded ISO dates, never returns future-dated closes, honors inclusive [from, to] bounds (returns the `to`-date bar when one exists), and partial/capped returns are the oldest contiguous slice (paginate oldest-first).
-- [ ] Lint proves no Yahoo identifier exists outside the adapter.
-- [ ] Completing 009–010 satisfies the M3 Definition of Done.
+- [x] Contract tests against recorded/mocked `yahoo-finance2` responses for all four capabilities. *(`providers/yahoo/yahoo.test.ts`, vi.mock — no live network.)*
+- [x] Malformed-response fixtures throw at the adapter boundary, tested. *(missing timezone, missing quotes, non-positive close, future-dated close, missing financialData, coverage-without-target, missing currency — each throws with the ticker named.)*
+- [x] Contract tests: the adapter echoes the requested ticker, returns zero-padded ISO dates, never returns future-dated closes, honors inclusive [from, to] bounds (returns the `to`-date bar when one exists), and partial/capped returns are the oldest contiguous slice (paginate oldest-first). *(Plus exchange-local date conversion via chart meta `exchangeTimezoneName`, not UTC-naive, and null-close bars dropped.)*
+- [x] Lint proves no Yahoo identifier exists outside the adapter. *(`no-provider-library-outside-providers`; probe-verified: a yahoo-finance2 import outside `providers/` fails `pnpm lint:deps`.)*
+- [x] Completing 009–010 satisfies the M3 Definition of Done. *(Registered in `providers/active.ts`; adapter serves all four capabilities plus currency.)*

@@ -97,9 +97,16 @@ export class Repository implements StorageRepository {
     );
   }
 
+  /**
+   * Stamp the native currency ONCE. COALESCE keeps an already-set currency,
+   * so the "copy only on first sync, never recompute" invariant (ADR-0012
+   * decision 3) is self-enforcing at the storage boundary — not merely a
+   * convention every caller must remember. A known ticker still matches one
+   * row, so the unknown-instrument check is preserved.
+   */
   async setInstrumentCurrency(ticker: string, currency: string): Promise<void> {
     this.updateInstrument(
-      "UPDATE instruments SET currency = ? WHERE ticker = ?",
+      "UPDATE instruments SET currency = COALESCE(currency, ?) WHERE ticker = ?",
       currency,
       ticker,
     );

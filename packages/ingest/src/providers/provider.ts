@@ -31,18 +31,46 @@ export interface Provider {
    * oldest-first.
    */
   getCloses?(ticker: string, from: IsoDate, to: IsoDate): Promise<DailyClose[]>;
-  getAnalystTargets?(ticker: string): Promise<AnalystSnapshot>;
+  /**
+   * Native trading currency of the instrument. Required by the `closes`
+   * capability (ADR-0012): currency travels with the price series, and
+   * ingestion copies it to `instruments.currency` (copy only, never
+   * compute). A provider serving `closes` must back this or fail loud at
+   * registration.
+   */
+  getInstrumentInfo?(
+    ticker: string,
+  ): Promise<{ ticker: string; currency: string }>;
+  /**
+   * `null` when the provider CLEARLY reports no analyst coverage (ADR-0012,
+   * decision 2): ingestion then writes no snapshot but still stamps the
+   * metadata sync, so an uncovered ticker is not refetched before its TTL.
+   * A malformed response (coverage reported but no usable target) throws at
+   * the adapter edge instead.
+   */
+  getAnalystTargets?(ticker: string): Promise<AnalystSnapshot | null>;
   getNextEarnings?(ticker: string): Promise<EarningsSnapshot>;
   getNextExDividend?(ticker: string): Promise<DividendSnapshot>;
 }
 
-/** The fetch method that must back each advertised capability. */
+/** A Provider fetch method name. */
+export type ProviderMethod =
+  | "getCloses"
+  | "getInstrumentInfo"
+  | "getAnalystTargets"
+  | "getNextEarnings"
+  | "getNextExDividend";
+
+/**
+ * The fetch method(s) that must back each advertised capability. A
+ * capability may require several methods: `closes` requires both the price
+ * series (`getCloses`) and the instrument currency that travels with it
+ * (`getInstrumentInfo`, ADR-0012 decision 3). The registry enforces every
+ * listed method is implemented at registration (fail loud).
+ */
 export const CAPABILITY_METHODS = {
-  closes: "getCloses",
-  analystTargets: "getAnalystTargets",
-  earningsCalendar: "getNextEarnings",
-  dividendCalendar: "getNextExDividend",
-} as const satisfies Record<
-  Capability,
-  "getCloses" | "getAnalystTargets" | "getNextEarnings" | "getNextExDividend"
->;
+  closes: ["getCloses", "getInstrumentInfo"],
+  analystTargets: ["getAnalystTargets"],
+  earningsCalendar: ["getNextEarnings"],
+  dividendCalendar: ["getNextExDividend"],
+} as const satisfies Record<Capability, readonly ProviderMethod[]>;

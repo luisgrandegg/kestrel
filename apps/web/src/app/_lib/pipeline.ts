@@ -116,9 +116,14 @@ export function webConfig(): KestrelConfig {
   return configFromEnv(process.env.KESTREL_CONFIG);
 }
 
-/** The registry over the single adapter-registration point (@kestrel/ingest). */
-export function registry(): ProviderRegistry {
-  return new ProviderRegistry(activeProviders());
+/**
+ * The registry over the single adapter-registration point (@kestrel/ingest).
+ * The active adapters read no wall clock: the run/as-of date is injected as
+ * `today` (ADR-0012) — the caller passes the same UTC calendar date it uses
+ * as the as-of bound (the page) or the ingestion run date (the cron route).
+ */
+export function registry(today: IsoDate): ProviderRegistry {
+  return new ProviderRegistry(activeProviders(() => today));
 }
 
 // Module-level lazy singleton, like the pool under it: a warm serverless
@@ -160,19 +165,19 @@ export interface IngestionOutcome {
 
 /**
  * The daily ingestion pipeline (the cron route's body) — mirrors the CLI's
- * runDailyPipeline: skip loudly when no active provider serves "closes"
- * (the Yahoo adapter is backlog item 010), otherwise run the throttled
- * daily refresh + backfill. Idempotent and resumable by design, so a
- * function timeout mid-backfill simply resumes on the next cron fire.
+ * runDailyPipeline: run the throttled daily refresh + backfill over the
+ * registered adapters (the Yahoo adapter serves "closes"). The skip branch
+ * remains as defensive degradation: were no active provider to serve
+ * "closes", it would skip loudly rather than fabricate. Idempotent and
+ * resumable by design, so a function timeout mid-backfill simply resumes on
+ * the next cron fire.
  */
 export async function runIngestion(today: IsoDate): Promise<IngestionOutcome> {
-  const providerRegistry = registry();
+  const providerRegistry = registry(today);
   if (!providerRegistry.isServed("closes")) {
     return {
       report: null,
-      skipped:
-        'no active provider serves "closes" — ingestion skipped (the Yahoo ' +
-        "adapter is backlog item 010)",
+      skipped: 'no active provider serves "closes" — ingestion skipped',
     };
   }
   const report = await runDaily(

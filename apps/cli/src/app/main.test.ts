@@ -31,6 +31,10 @@ const fakeProvider = (): Provider & { calls: () => number } => {
         })),
       );
     },
+    getInstrumentInfo: (ticker) => {
+      calls += 1;
+      return Promise.resolve({ ticker, currency: "USD" });
+    },
     getAnalystTargets: (ticker) => {
       calls += 1;
       return Promise.resolve({

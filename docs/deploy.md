@@ -65,8 +65,9 @@ cron lag because the pipeline dedupes by UTC date).
   more.
 - Trigger it manually to smoke-test:
   `curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>.vercel.app/api/ingest`
-  — until the Yahoo adapter (backlog item 010) lands it returns a loud
-  `skipped` JSON body, and the dashboard renders every screen disabled.
+  — the Yahoo adapter (backlog item 010) is registered, so this runs the
+  throttled daily refresh + backfill and returns a `report` JSON body; a
+  same-day re-fire is a no-op (idempotent, deduped by UTC date).
 
 ## 5. Function duration
 
