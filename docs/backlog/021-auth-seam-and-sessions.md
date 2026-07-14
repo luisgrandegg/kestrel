@@ -17,10 +17,16 @@ with no method configured degrades honestly instead of breaking.
   ```
   id: string                      // "google", ...
   displayName: string             // for the sign-in page
-  beginSignIn(state) → redirect URL
-  handleCallback(params, state) → { provider, subject, email,
-                                    emailVerified, displayName }
+  beginSignIn() → { redirectUrl,
+                    transaction: { state, nonce?, codeVerifier? } }
+  handleCallback(params, transaction) → { provider, subject, email,
+                                          emailVerified, displayName }
   ```
+  The `transaction` record is what survives the redirect (in the
+  short-lived cookie below): `state` for CSRF, plus whatever the method
+  minted at begin time and must verify at callback time — item 022 needs
+  `nonce` (id_token claim check) and `codeVerifier` (PKCE), which a
+  state-only round-trip could not deliver.
   The contract returns *identity claims*; mapping claims → user rows is
   the seam's job (via item 020's `UserStore`), never the method's.
 - **Method registry**: configured methods only (a method whose env vars
@@ -37,9 +43,10 @@ with no method configured degrades honestly instead of breaking.
   dashboard requires a session; unauthenticated requests are redirected
   to the sign-in page. `/api/ingest` is machine-auth (CRON_SECRET) and
   is NOT session-gated — unchanged.
-- **CSRF/replay**: OAuth `state` parameter round-tripped through a
-  short-lived cookie and verified on callback; PKCE where the method
-  supports it (item 022 does).
+- **CSRF/replay**: the `transaction` record (state + nonce + PKCE
+  verifier as minted by the method) round-tripped through a short-lived
+  HTTP-only cookie; `state` verified by the seam on every callback, the
+  rest handed to the method's `handleCallback` for its own checks.
 - Tests: contract-level with a **fake AuthMethod** (the `providerWith`
   pattern) — sign-in redirect, callback → user created/linked via 020's
   open-question decisions, session issued/verified/expired/cleared,

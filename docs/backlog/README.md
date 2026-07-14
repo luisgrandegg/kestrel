@@ -31,8 +31,9 @@ Each item links back to the sections of `MVP.md` / `CONSTITUTION.md` it implemen
 | [021](021-auth-seam-and-sessions.md) | Auth seam + sessions (method-agnostic) | M8 | 020 |
 | [022](022-google-authentication.md) | Google authentication | M8 | 021 |
 
-M8 (users & auth) is an owner-directed post-MVP extension (2026-07-14) —
-the one sanctioned exception to the §10 rule below, scoped to access
+M8 (users & auth) is an owner-directed post-MVP extension (2026-07-14),
+beyond MVP.md scope entirely (auth was never listed, not even in §10's
+deferral list — the §10 rule below holds unmodified). Scoped to access
 control only: the domain pipeline stays user-independent.
 
 ## Working rules (from `CLAUDE.md`)

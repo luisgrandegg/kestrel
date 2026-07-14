@@ -1,6 +1,6 @@
 # 020 — User model + store
 
-**Milestone:** M8 (users & auth — owner-directed post-MVP extension, 2026-07-14) · **Depends on:** items 008/deploy PR 3 (storage seam, both engines) · **Spec:** this item (no MVP.md section; MVP.md §10 explicitly deferred auth)
+**Milestone:** M8 (users & auth — owner-directed post-MVP extension, 2026-07-14) · **Depends on:** items 008/deploy PR 3 (storage seam, both engines) · **Spec:** this item (no MVP.md section; auth/users were never in MVP scope — not even in §10's deferral list)
 
 ## Goal
 
