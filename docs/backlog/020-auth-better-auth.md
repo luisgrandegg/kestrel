@@ -18,7 +18,8 @@ dashboard becomes private: signed-in users only.
   migrations are applied alongside `supabase/migrations/`.
 - **Google provider**, enabled only when `GOOGLE_CLIENT_ID` +
   `GOOGLE_CLIENT_SECRET` are present (a method whose env vars are absent is
-  not offered — the honest-degradation rule, guardrail 4). Zero methods
+  not offered) — applying, by analogy, the same honest-degradation
+  principle guardrail 4 sets for capability-gated screens. Zero methods
   configured → the sign-in page says so; no broken flow.
 - **Provisioning + linking** (ADR-0013): auto-create a user on first
   successful sign-in; a new identity whose provider-verified email matches
