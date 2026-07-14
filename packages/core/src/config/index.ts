@@ -44,6 +44,21 @@ export interface IngestionConfig {
   maxConsecutiveFailures: number;
 }
 
+export interface AuthConfig {
+  /**
+   * Upper bound on a session's lifetime, in hours (backlog item 020,
+   * ADR-0013). Library-agnostic auth setting; the composition root maps it
+   * onto whatever the chosen auth layer offers.
+   */
+  sessionAbsoluteHours: number;
+  /**
+   * Sliding refresh window, in hours: an active session's expiry is
+   * extended once it is older than this, so continued use keeps a user
+   * signed in. Must be <= sessionAbsoluteHours.
+   */
+  sessionSlidingHours: number;
+}
+
 export interface KestrelConfig {
   targetStatistic: TargetStatistic;
   /** Quality gate: instruments with fewer analysts never qualify. */
@@ -60,6 +75,7 @@ export interface KestrelConfig {
   earnings: EventWindowConfig;
   exDividend: EventWindowConfig;
   ingestion: IngestionConfig;
+  auth: AuthConfig;
 }
 
 export type DeepPartial<T> = {
@@ -89,6 +105,12 @@ export const defaultConfig: KestrelConfig = deepFreeze({
     metadataTtlDays: 7,
     interCallDelayMs: 1500,
     maxConsecutiveFailures: 3,
+  },
+  auth: {
+    // Session durations (ADR-0013): 30 days absolute, 7 days sliding.
+    // Kept as config (guardrail 5), added to the §9 defaults.
+    sessionAbsoluteHours: 720,
+    sessionSlidingHours: 168,
   },
 });
 
@@ -232,6 +254,25 @@ function validateConfig(config: KestrelConfig): void {
       `Config key "ingestion.maxConsecutiveFailures" must be a positive integer, got: ${JSON.stringify(maxFailures)}`,
     );
   }
+  // Session windows are positive whole hours; a sliding window longer than
+  // the absolute ceiling is incoherent (it could never fully apply).
+  const sessionHours: Array<[string, unknown]> = [
+    ["auth.sessionAbsoluteHours", config.auth.sessionAbsoluteHours],
+    ["auth.sessionSlidingHours", config.auth.sessionSlidingHours],
+  ];
+  for (const [key, value] of sessionHours) {
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+      throw new Error(
+        `Config key "${key}" must be a positive integer (hours), got: ${JSON.stringify(value)}`,
+      );
+    }
+  }
+  if (config.auth.sessionSlidingHours > config.auth.sessionAbsoluteHours) {
+    throw new Error(
+      `Config key "auth.sessionSlidingHours" (${config.auth.sessionSlidingHours}) must be <= "auth.sessionAbsoluteHours" (${config.auth.sessionAbsoluteHours})`,
+    );
+  }
+
   // θ is a ratio: 0.10 means 10%. θ >= 1 can never be confirmed by positive
   // prices, so the metric would silently count 0 for every series.
   const swing = config.fluctuation.swingPct;

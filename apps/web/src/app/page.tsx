@@ -1,5 +1,8 @@
 import type { ScreenEvaluation } from "@kestrel/core/types";
 import { utcIsoDate } from "@kestrel/core/types/guards";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { getAuth } from "./_lib/auth";
 import { money, percent } from "./_lib/format";
 import {
   getDashboardData,
@@ -7,12 +10,17 @@ import {
   repository,
   webConfig,
 } from "./_lib/pipeline";
+import { SignOut } from "./SignOut";
 
 /**
  * The §8 dashboard as HTML: three category sections with the exact
  * per-row fields of MVP.md §8, native currency ("?" when unreported),
  * disabled screens shown with their missing capabilities (guardrail 4),
  * and research-candidates framing throughout.
+ *
+ * The dashboard is private (item 020, ADR-0013): an unauthenticated request
+ * is redirected to /sign-in before any data is read. `/api/ingest` stays
+ * machine-auth (CRON_SECRET), NOT session-gated.
  *
  * Always rendered from live storage (force-dynamic): a cached page would
  * present stale data as fresh. The `new Date()` below is one of the
@@ -23,6 +31,10 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  const session = await getAuth().api.getSession({ headers: await headers() });
+  if (!session) {
+    redirect("/sign-in");
+  }
   const asOf = utcIsoDate(new Date());
   const data = await getDashboardData(
     repository(),
@@ -32,7 +44,10 @@ export default async function DashboardPage() {
   );
   return (
     <main>
-      <h1>Kestrel — research candidates as of {data.asOf}</h1>
+      <header className="topbar">
+        <h1>Kestrel — research candidates as of {data.asOf}</h1>
+        <SignOut email={session.user.email} />
+      </header>
       <p className="framing">
         Candidates for further research, not recommendations. Prices in each
         instrument&apos;s native currency.

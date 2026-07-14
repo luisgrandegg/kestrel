@@ -62,6 +62,16 @@ Vercel-Cron route. The standalone CLI and the SQLite-committing GitHub Action
 have been retired (ADR-0013); the SQLite repository survives only as the fast
 reference engine that proves the storage port in the contract tests.
 
+The dashboard is **private** (item 020, ADR-0013): sign-in is via
+[better-auth](https://better-auth.com) with Google, and users are
+auto-created on first sign-in (identities linked by verified email). A method
+whose OAuth secrets are absent is not offered — the sign-in page says so
+honestly rather than showing a broken button. Session durations come from
+config (`auth.sessionAbsoluteHours`/`sessionSlidingHours`). Per-user
+watchlists come next (item 021); for now every signed-in user sees the shared
+watchlist's screens. See [`docs/deploy.md`](docs/deploy.md) for the Google +
+`BETTER_AUTH_*` setup.
+
 **Live:** the Yahoo adapter is registered in
 `packages/ingest/src/providers/active.ts`, so scheduled runs ingest live
 market data and every screen is enabled. The three open questions on item 010
@@ -162,12 +172,14 @@ packages/
 apps/
   web/             @kestrel/web — the sole composition root (ADR-0011, 0013):
     src/           Next.js dashboard on Vercel over Supabase Postgres
-      app/         page (HTML dashboard) + api/ingest cron route =
-                   presentation; _lib/ composition glue (pg-pool executor,
-                   pipeline, screen-evaluation harness, formatters)
+      app/         page (private HTML dashboard) + sign-in page + api/ingest
+                   cron route + api/auth/* (better-auth) = presentation;
+                   _lib/ composition glue (pg-pool executor, pipeline,
+                   screen-evaluation harness, formatters, auth instance)
 supabase/
-  migrations/ Postgres schema — the SQL twin of storage/schema.ts; the
-              repository contract tests run against both engines
+  migrations/ 00001_init.sql (market data — the SQL twin of storage/schema.ts;
+              the repository contract tests run against both engines) +
+              00002_auth.sql (better-auth's own user/session/account tables)
 docs/
   backlog/    dependency-ordered build items with acceptance criteria
   adr/        decision records (background, not build instructions)

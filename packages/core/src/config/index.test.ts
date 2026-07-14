@@ -29,6 +29,12 @@ describe("defaultConfig", () => {
         // failure" (backlog item 011).
         maxConsecutiveFailures: 3,
       },
+      auth: {
+        // Session durations added to the §9 defaults (backlog item 020,
+        // ADR-0013): 30 days absolute, 7 days sliding.
+        sessionAbsoluteHours: 720,
+        sessionSlidingHours: 168,
+      },
     });
   });
 
@@ -129,6 +135,28 @@ describe("resolveConfig", () => {
     expect(() => resolveConfig({ targetStatistic: "mean" as never })).toThrow(
       /targetStatistic must be "median"/,
     );
+    // Session windows: positive whole hours, sliding never exceeding absolute.
+    expect(() => resolveConfig({ auth: { sessionAbsoluteHours: 0 } })).toThrow(
+      /"auth.sessionAbsoluteHours" must be a positive integer/,
+    );
+    expect(() => resolveConfig({ auth: { sessionSlidingHours: 1.5 } })).toThrow(
+      /"auth.sessionSlidingHours" must be a positive integer/,
+    );
+    expect(() =>
+      resolveConfig({
+        auth: { sessionAbsoluteHours: 100, sessionSlidingHours: 200 },
+      }),
+    ).toThrow(
+      /"auth.sessionSlidingHours" \(200\) must be <= "auth.sessionAbsoluteHours" \(100\)/,
+    );
+  });
+
+  it("accepts coherent session-window overrides", () => {
+    const config = resolveConfig({
+      auth: { sessionAbsoluteHours: 240, sessionSlidingHours: 24 },
+    });
+    expect(config.auth.sessionAbsoluteHours).toBe(240);
+    expect(config.auth.sessionSlidingHours).toBe(24);
   });
 });
 

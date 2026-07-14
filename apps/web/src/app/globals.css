@@ -79,3 +79,38 @@ th {
   border-left: 3px solid var(--border);
   margin: 0;
 }
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.signout .email {
+  color: var(--muted);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--accent-bg);
+  color: inherit;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
