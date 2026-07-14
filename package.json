@@ -13,13 +13,13 @@
     "url": "https://github.com/luisgrandegg/kestrel"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "daily": "pnpm build && node dist/app/cli.js",
+    "build": "turbo run build",
+    "daily": "pnpm build && node apps/cli/dist/cli.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "turbo run typecheck && tsc --noEmit",
     "lint": "biome check . && pnpm lint:deps",
-    "lint:deps": "depcruise src",
+    "lint:deps": "depcruise packages apps",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
   },
@@ -28,6 +28,7 @@
     "@swc/core": "^1.15.43",
     "@types/node": "^26.1.1",
     "dependency-cruiser": "^18.1.0",
+    "turbo": "^2.5.8",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }

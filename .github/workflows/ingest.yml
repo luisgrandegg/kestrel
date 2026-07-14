@@ -30,10 +30,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Builds the CLI bundle (turbo → esbuild in apps/cli).
       - run: pnpm build
 
       - name: Run the throttled daily pipeline
-        run: node dist/app/cli.js data/kestrel.db watchlist.json dashboard.md
+        run: node apps/cli/dist/cli.js data/kestrel.db watchlist.json dashboard.md
 
       # NOTE: this pushes directly to main. If branch protection ever
       # requires pull requests on main, this step will start failing and
