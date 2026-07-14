@@ -28,15 +28,27 @@ import type { ProviderRegistry } from "@kestrel/ingest/providers/registry";
  * changed after that date.
  */
 
-/** Read every ready instrument's evaluation inputs, bounded by asOf. */
+/**
+ * Read ready instruments' evaluation inputs, bounded by asOf. When
+ * `allowedTickers` is given, only those tickers are evaluated — the per-user
+ * watchlist filter (item 021): the shared market data drives the metrics, but
+ * the ticker SET is the requesting user's. Undefined means every ready
+ * instrument (used by non-user-scoped callers/tests).
+ */
 export async function buildSnapshots(
   repo: StorageRepository,
   config: KestrelConfig,
   asOf: IsoDate,
+  allowedTickers?: readonly string[],
 ): Promise<InstrumentSnapshot[]> {
+  const allowed =
+    allowedTickers === undefined ? undefined : new Set(allowedTickers);
   const instruments = await repo.listInstruments("ready");
   const snapshots: InstrumentSnapshot[] = [];
   for (const instrument of instruments) {
+    if (allowed !== undefined && !allowed.has(instrument.ticker)) {
+      continue;
+    }
     const snapshot = await buildSnapshot(repo, config, instrument, asOf);
     if (snapshot !== null) {
       snapshots.push(snapshot);

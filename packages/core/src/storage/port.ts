@@ -58,6 +58,38 @@ export interface StorageRepository {
   /** A successful fetch clears the consecutive-failure streak. */
   resetFailures(ticker: string): Promise<void>;
 
+  // ---- user watchlists (per-user bookkeeping, not observations) ----
+
+  /**
+   * Add a ticker to a user's watchlist. Insert-or-ignore on
+   * `(user_id, ticker)`, so re-adding is a no-op. `userId` is better-auth's
+   * user id — a LOGICAL reference (no cross-schema FK; auth's tables sit
+   * beside this seam, ADR-0013). Membership is mutable bookkeeping, like
+   * `instruments`; it is NOT an append-only observation.
+   */
+  addToWatchlist(
+    userId: string,
+    ticker: string,
+    addedAt: IsoDate,
+  ): Promise<void>;
+
+  /**
+   * Remove a ticker from a user's watchlist. Removing an absent row is a
+   * no-op. This deletes membership only — the ticker's price/snapshot
+   * history is retained (append-only, CONSTITUTION.md §3.1).
+   */
+  removeFromWatchlist(userId: string, ticker: string): Promise<void>;
+
+  /** The tickers on one user's watchlist, sorted. */
+  getUserWatchlist(userId: string): Promise<string[]>;
+
+  /**
+   * The deduped UNION of every user's watchlist tickers, sorted — the set
+   * ingestion fetches (each ticker once, ADR-0013). A ticker no user tracks
+   * is absent, so it is not ingested; its stored history is retained.
+   */
+  getAllWatchlistedTickers(): Promise<string[]>;
+
   // ---- prices (append-only observations) ----
 
   /**

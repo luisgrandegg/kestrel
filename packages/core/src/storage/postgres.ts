@@ -77,6 +77,49 @@ export class PostgresRepository implements StorageRepository {
     return rows[0] as Instrument | undefined;
   }
 
+  // ---- user watchlists (per-user bookkeeping, not observations) ----
+
+  async addToWatchlist(
+    userId: string,
+    ticker: string,
+    addedAt: IsoDate,
+  ): Promise<void> {
+    await this.sql.query(
+      "INSERT INTO user_watchlist (user_id, ticker, added_at) VALUES ($1, $2, $3) ON CONFLICT (user_id, ticker) DO NOTHING",
+      [userId, ticker, addedAt],
+    );
+  }
+
+  async removeFromWatchlist(userId: string, ticker: string): Promise<void> {
+    await this.sql.query(
+      "DELETE FROM user_watchlist WHERE user_id = $1 AND ticker = $2",
+      [userId, ticker],
+    );
+  }
+
+  // ORDER BY ... COLLATE "C" pins byte-order sorting, matching SQLite's
+  // default BINARY collation — without it Postgres would use its locale
+  // collation and order punctuated tickers (e.g. "BF.A") differently from the
+  // reference engine, a divergence the alphabetic contract fixtures miss.
+  async getUserWatchlist(userId: string): Promise<string[]> {
+    const { rows } = await this.sql.query(
+      'SELECT ticker FROM user_watchlist WHERE user_id = $1 ORDER BY ticker COLLATE "C"',
+      [userId],
+    );
+    return (rows as Array<{ ticker: string }>).map((row) => row.ticker);
+  }
+
+  async getAllWatchlistedTickers(): Promise<string[]> {
+    // GROUP BY (not DISTINCT) to dedupe: Postgres forbids an ORDER BY
+    // expression (here the COLLATE) that is not in a DISTINCT select list,
+    // but allows ordering a grouped column by a collation.
+    const { rows } = await this.sql.query(
+      'SELECT ticker FROM user_watchlist GROUP BY ticker ORDER BY ticker COLLATE "C"',
+      [],
+    );
+    return (rows as Array<{ ticker: string }>).map((row) => row.ticker);
+  }
+
   async listInstruments(state?: InstrumentState): Promise<Instrument[]> {
     const { rows } = await this.sql.query(
       `${INSTRUMENT_SELECT} WHERE ($1::text IS NULL OR state = $1) ORDER BY ticker`,

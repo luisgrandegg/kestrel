@@ -1,31 +1,23 @@
-import { readFileSync } from "node:fs";
 import type { StorageRepository } from "@kestrel/core/storage/port";
 import type { Instrument, IsoDate } from "@kestrel/core/types";
 
 /**
- * Watchlist (backlog item 011) — MVP.md §1: a user-defined list of tickers,
- * committed as a JSON file.
+ * Watchlist helpers (backlog item 011; union source per item 021) — MVP.md
+ * §1: the tickers to ingest. Since item 021 (ADR-0013) the source is the
+ * UNION of every user's per-user watchlist (`user_watchlist`, behind the
+ * storage port), not a committed JSON file — the composition root queries the
+ * union and passes it here as a ticker list.
  *
- * Removal semantics (decision recorded on the backlog item): ingestion
- * drives off the intersection of the watchlist file and the instruments
- * table. A ticker removed from the file simply stops being synced — its
- * instruments row and all stored history remain untouched (append-only,
+ * Removal semantics (decision recorded on the backlog item): ingestion drives
+ * off the intersection of the passed ticker list and the instruments table. A
+ * ticker no user tracks simply drops out of the list and stops being synced —
+ * its instruments row and all stored history remain untouched (append-only,
  * guardrail 3). No `archived` state, no schema migration.
  *
  * Ordering contract: a run calls `registerWatchlist` before
  * `syncableInstruments`; the latter fails loudly on listed-but-unregistered
  * tickers rather than silently never syncing them.
  */
-
-/**
- * Resolved against process.cwd() (repo-root invocation). The deployed web
- * app does not use this loader — it bundles watchlist.json at build time
- * and normalizes it inline (there is no repo-root cwd in a serverless
- * function). `loadWatchlist` is retained as the file-based reference loader
- * with its contract tests until backlog 021 retires watchlist.json for the
- * per-user union ingestion; callers may still pass an explicit path.
- */
-export const DEFAULT_WATCHLIST_PATH = "watchlist.json";
 
 /** Canonical ticker form used everywhere: trimmed, uppercase. */
 export function normalizeTicker(raw: string): string {
@@ -36,46 +28,6 @@ export function normalizeTicker(raw: string): string {
     );
   }
   return ticker;
-}
-
-/**
- * Load and validate the watchlist file: a JSON array of ticker strings.
- * (The read/parse ladder mirrors loadConfig in @kestrel/core config — keep their
- * error-wrapping styles in sync.)
- */
-export function loadWatchlist(path = DEFAULT_WATCHLIST_PATH): string[] {
-  let raw: string;
-  try {
-    raw = readFileSync(path, "utf8");
-  } catch (error) {
-    throw new Error(`Watchlist file not readable: ${path}`, { cause: error });
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`Watchlist file is not valid JSON: ${path}`, {
-      cause: error,
-    });
-  }
-  if (!Array.isArray(parsed)) {
-    throw new Error(`Watchlist must be a JSON array of tickers: ${path}`);
-  }
-  const tickers: string[] = [];
-  const seen = new Set<string>();
-  for (const entry of parsed) {
-    if (typeof entry !== "string" || entry.trim() === "") {
-      throw new Error(
-        `Watchlist entries must be non-empty ticker strings, got: ${JSON.stringify(entry)}`,
-      );
-    }
-    const ticker = normalizeTicker(entry);
-    if (!seen.has(ticker)) {
-      seen.add(ticker);
-      tickers.push(ticker);
-    }
-  }
-  return tickers;
 }
 
 /**

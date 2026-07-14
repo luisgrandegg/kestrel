@@ -8,9 +8,11 @@ import {
   getDashboardData,
   registry,
   repository,
+  userTickers,
   webConfig,
 } from "./_lib/pipeline";
 import { SignOut } from "./SignOut";
+import { WatchlistManager } from "./WatchlistManager";
 
 /**
  * The §8 dashboard as HTML: three category sections with the exact
@@ -30,17 +32,26 @@ import { SignOut } from "./SignOut";
  */
 export const dynamic = "force-dynamic";
 
+// The watchlist add/remove server actions are invoked against this route
+// segment, so its ceiling governs them. `addTicker` awaits a throttled
+// kick-on-add backfill (~a handful of interCallDelayMs-spaced calls), which
+// can exceed the default function timeout; give it headroom (item 021). 60 is
+// the Hobby ceiling without Fluid compute (see docs/deploy.md §5).
+export const maxDuration = 60;
+
 export default async function DashboardPage() {
   const session = await getAuth().api.getSession({ headers: await headers() });
   if (!session) {
     redirect("/sign-in");
   }
   const asOf = utcIsoDate(new Date());
+  const tickers = await userTickers(session.user.id);
   const data = await getDashboardData(
     repository(),
     registry(asOf),
     webConfig(),
     asOf,
+    tickers,
   );
   return (
     <main>
@@ -52,6 +63,7 @@ export default async function DashboardPage() {
         Candidates for further research, not recommendations. Prices in each
         instrument&apos;s native currency.
       </p>
+      <WatchlistManager tickers={tickers} />
       <Section
         title="Category 1 — volatile + undervalued"
         evaluation={data.category1}
