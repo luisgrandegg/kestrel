@@ -50,12 +50,20 @@ module.exports = {
       to: { path: "^packages/core/src/storage/(repository|postgres)" },
     },
     {
-      name: "only-storage-touches-sqlite",
+      name: "only-storage-touches-the-database",
       comment:
-        "The storage repository is the only code allowed to touch SQLite (MVP.md §11).",
+        "The storage repositories are the only code allowed to touch a " +
+        "database engine — SQLite or Postgres (MVP.md §11, ADR-0011). " +
+        "Driver ADAPTERS (pg.Pool/PGlite → SqlExecutor) live with the " +
+        "composition root or tests, but repository/engine modules and the " +
+        "engine libraries themselves stay behind storage/.",
       severity: "error",
-      from: { pathNot: "^packages/core/src/storage/" },
-      to: { path: "better-sqlite3|node:sqlite" },
+      from: {
+        pathNot: "^(packages/core/src/storage|apps/[^/]+/src/app)/",
+      },
+      to: {
+        path: "better-sqlite3|node:sqlite|node_modules/pg/|@electric-sql/pglite",
+      },
     },
     {
       name: "metrics-screens-are-pure",
@@ -158,8 +166,13 @@ module.exports = {
       conditionNames: ["types", "import", "require", "node", "default"],
       extensions: [".ts", ".js", ".json"],
     },
-    // Tests and test-only fixture helpers sit outside the seam graph;
-    // dist/ is built output, not source.
-    exclude: { path: "\\.test\\.ts$|/src/test-support/|/dist/" },
+    // Tests and test-only fixture helpers sit outside the seam graph; our
+    // packages' dist/ is built output, not source. The dist pattern is
+    // anchored to OUR workspace roots — a bare "/dist/" would also match
+    // node_modules/<pkg>/dist/... and silently drop most npm-package edges
+    // from the graph (which would blind the engine-library rule above).
+    exclude: {
+      path: "\\.test\\.ts$|/src/test-support/|^(packages|apps)/[^/]+/dist/",
+    },
   },
 };

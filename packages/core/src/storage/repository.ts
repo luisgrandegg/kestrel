@@ -168,8 +168,11 @@ export class Repository implements StorageRepository {
   /**
    * Validates via the shared write-edge guards (./validation.ts), not in
    * SQL, because SQL's CHECK cannot express finiteness. Uses a savepoint
-   * rather than BEGIN so callers may compose this inside their own
-   * transaction.
+   * internally for batch atomicity. NOTE: batch atomicity is the ONLY
+   * transactional guarantee the port offers — callers must not wrap
+   * repository calls in their own outer transaction; the Postgres engine
+   * runs this on a pooled connection where an outer transaction would not
+   * compose (see ./postgres.ts).
    */
   async insertCloses(closes: readonly DailyClose[]): Promise<void> {
     validateCloses(closes);

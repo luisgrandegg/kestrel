@@ -34,8 +34,14 @@ import {
  *
  * Talks to the database only through the driver-agnostic {@link SqlExecutor}
  * seam (./executor.ts), so this module — and @kestrel/core — has no driver
- * dependency: the composition root adapts `pg.Pool` (Supabase's pooled
- * connection string), the tests adapt PGlite. Column aliases are quoted
+ * dependency: the contract tests adapt PGlite; the deployed composition
+ * root (apps/web, not yet landed) will adapt `pg.Pool` over Supabase's
+ * pooled connection string. Batch atomicity (insertCloses) is the only
+ * transactional guarantee — it runs a top-level transaction on a pooled
+ * connection, so callers must never wrap repository calls in an outer
+ * transaction of their own (the SQLite engine's savepoint would nest;
+ * this one would not — the port exposes no transaction concept for
+ * exactly that reason). Column aliases are quoted
  * (`AS "asOf"`) because Postgres lowercases unquoted identifiers; optional
  * parameters carry explicit `::text` casts so null-elision predicates
  * (`$n IS NULL OR ...`) stay typeable by the planner.
@@ -141,7 +147,15 @@ export class PostgresRepository implements StorageRepository {
     result: { rowCount: number | null },
     ticker: string,
   ): void {
-    if (!result.rowCount) {
+    // null means the DRIVER did not report a count — that is an adapter
+    // contract breach, not an unknown ticker; conflating them would brick
+    // every bookkeeping update over such a driver with misleading errors.
+    if (result.rowCount === null) {
+      throw new Error(
+        "SqlExecutor contract breach: the driver reported no row count for an UPDATE (see executor.ts — instrument updates require real counts)",
+      );
+    }
+    if (result.rowCount === 0) {
       throw new Error(`Unknown instrument: ${ticker}`);
     }
   }

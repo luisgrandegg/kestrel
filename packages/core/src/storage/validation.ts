@@ -23,6 +23,14 @@ import type {
 /** Validate every row of a closes batch before any row is persisted. */
 export function validateCloses(closes: readonly DailyClose[]): void {
   for (const { ticker, date, close } of closes) {
+    // A missing/empty ticker would otherwise fail at the SQL layer MID-batch
+    // (NOT NULL), after earlier rows persisted — validate it up front so the
+    // validate-all-then-insert guarantee holds.
+    if (typeof ticker !== "string" || ticker === "") {
+      throw new RangeError(
+        `close row must carry a non-empty ticker, got: ${JSON.stringify(ticker)} @ ${date}`,
+      );
+    }
     assertPositiveFinite(`close for ${ticker} @ ${date}`, close);
     assertIsoDate(`close date for ${ticker}`, date);
   }

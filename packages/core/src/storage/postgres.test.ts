@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
-import { afterAll, beforeAll } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { describeRepositoryContract } from "../test-support/repositoryContract.js";
 import type { SqlExecutor, SqlQueryable, SqlRow } from "./executor.js";
 import { PostgresRepository } from "./postgres.js";
@@ -59,17 +59,59 @@ const executor: SqlExecutor = {
     // tx.rollback() escape hatch, which we never use), hence the cast.
     return (await db.transaction((tx) => fn(adapt(tx)))) as T;
   },
-  end: () => db.close(),
+  // The PGlite instance is SHARED across the whole suite: a repository's
+  // close() must not tear it down for later tests (the port's close() is
+  // still contract-covered — the SQLite run exercises the real thing).
+  // afterAll below closes the raw instance exactly once.
+  end: () => Promise.resolve(),
 };
 
 // Boot the WASM runtime inside the (longer) hook budget, not the first
 // test's — cold start can exceed the per-test timeout.
 beforeAll(() => db.waitReady);
 
-describeRepositoryContract("postgres", async () => {
+const makeRepo = async (): Promise<PostgresRepository> => {
   await db.exec(`DROP TABLE IF EXISTS ${TABLES.join(", ")} CASCADE;`);
   await db.exec(MIGRATION);
   return new PostgresRepository(executor);
+};
+
+describeRepositoryContract("postgres", makeRepo);
+
+describe("PostgresRepository — transaction rollback (engine-specific)", () => {
+  it("insertCloses rolls back the whole batch when a statement fails mid-transaction", async () => {
+    const repo = await makeRepo();
+    // Wrap the executor so the SECOND insert inside the transaction throws
+    // AT THE SQL LAYER — past the shared validation, which the contract's
+    // atomicity test already covers. This exercises the real BEGIN/ROLLBACK
+    // path that a no-op transaction wrapper would fake green.
+    let inserts = 0;
+    const failing: SqlExecutor = {
+      ...executor,
+      transaction: <T>(fn: (tx: SqlQueryable) => Promise<T>) =>
+        executor.transaction((tx) =>
+          fn({
+            query(text, params) {
+              inserts += 1;
+              if (inserts === 2) {
+                throw new Error("simulated driver failure mid-batch");
+              }
+              return tx.query(text, params);
+            },
+          }),
+        ),
+    };
+    const failingRepo = new PostgresRepository(failing);
+    await expect(
+      failingRepo.insertCloses([
+        { ticker: "ACME", date: "2026-07-10", close: 100 },
+        { ticker: "ACME", date: "2026-07-11", close: 101 },
+      ]),
+    ).rejects.toThrow("simulated driver failure mid-batch");
+    // Nothing from the batch persisted — including the FIRST row, which had
+    // already been inserted inside the aborted transaction.
+    expect(await repo.getCloses("ACME")).toHaveLength(0);
+  });
 });
 
 afterAll(() => db.close());
