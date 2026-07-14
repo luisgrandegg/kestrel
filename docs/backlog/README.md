@@ -27,14 +27,17 @@ Each item links back to the sections of `MVP.md` / `CONSTITUTION.md` it implemen
 | [017](017-screen-category3-pre-ex-dividend.md) | Screen 3: pre-ex-dividend + undervalued | M5 | 016 |
 | [018](018-dashboard.md) | Dashboard presentation | M6 | 015, 016, 017 |
 | [019](019-scheduled-github-action.md) | Scheduled ingestion (GitHub Action) | M7 | 013 |
-| [020](020-user-model-and-store.md) | User model + store | M8 | storage seam (008 + deploy) |
-| [021](021-auth-seam-and-sessions.md) | Auth seam + sessions (method-agnostic) | M8 | 020 |
-| [022](022-google-authentication.md) | Google authentication | M8 | 021 |
+| [020](020-auth-better-auth.md) | Auth via better-auth (users, Google, private dashboard) | M8 | deploy PRs |
+| [021](021-per-user-watchlists.md) | Per-user watchlists + union ingestion | M8 | 020 |
+| [022](022-retire-cli-and-action.md) | Retire the CLI and the GitHub Action | M8 | none |
 
-M8 (users & auth) is an owner-directed post-MVP extension (2026-07-14),
-beyond MVP.md scope entirely (auth was never listed, not even in §10's
-deferral list — the §10 rule below holds unmodified). Scoped to access
-control only: the domain pipeline stays user-independent.
+M8 (users, auth, multi-user) is an owner-directed post-MVP extension
+(2026-07-14, ADR-0013), beyond MVP.md scope entirely (auth was never listed,
+not even in §10's deferral list — the §10 rule below holds unmodified). It
+pivots the app to multi-user over shared market data: better-auth for
+sign-in, per-user watchlists, union ingestion, and a Vercel/Supabase-only
+deployment (the CLI and GitHub Action are retired). **Build order:** 022
+(retire the CLI, shrink to one app) → 020 (auth) → 021 (per-user data).
 
 ## Working rules (from `CLAUDE.md`)
 
